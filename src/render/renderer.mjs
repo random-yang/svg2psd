@@ -15,10 +15,11 @@ const serializer = new XMLSerializer();
  * @param {number} width - 画布宽度
  * @param {number} height - 画布高度
  * @param {number} scale - 缩放因子
+ * @param {number[]} [transform] - 累积变换矩阵 [a,b,c,d,e,f]
  * @returns {{ data: Uint8ClampedArray, width: number, height: number, top: number, left: number, right: number, bottom: number } | null}
  */
-export function renderElement(element, svgRoot, width, height, scale) {
-  const svgStr = buildStandaloneSvg(element, svgRoot);
+export function renderElement(element, svgRoot, width, height, scale, transform) {
+  const svgStr = buildStandaloneSvg(element, svgRoot, transform);
   return renderSvgString(svgStr, width, height, scale);
 }
 
@@ -68,8 +69,11 @@ export function renderSvgString(svgStr, width, height, scale) {
 /**
  * 构建只包含指定元素的完整 SVG 字符串
  * 保留原始 SVG 的 defs、style 和 viewBox
+ * @param {Element} element
+ * @param {Element} svgRoot
+ * @param {number[]} [transform] - 累积变换矩阵 [a,b,c,d,e,f]
  */
-export function buildStandaloneSvg(element, svgRoot) {
+export function buildStandaloneSvg(element, svgRoot, transform) {
   const doc = svgRoot.ownerDocument;
   const clone = svgRoot.cloneNode(false); // 浅克隆 <svg> 属性
 
@@ -87,9 +91,21 @@ export function buildStandaloneSvg(element, svgRoot) {
   // 克隆目标元素，移除 foreignObject（文字单独处理）
   const elClone = element.cloneNode(true);
   removeForeignObjects(elClone);
+
+  // 将累积变换矩阵应用到克隆元素上（替换元素自身的 transform，
+  // 因为累积矩阵已包含元素自身的变换）
+  if (transform && !isIdentity(transform)) {
+    const [a, b, c, d, e, f] = transform;
+    elClone.setAttribute("transform", `matrix(${a},${b},${c},${d},${e},${f})`);
+  }
+
   clone.appendChild(elClone);
 
   return '<?xml version="1.0" encoding="UTF-8"?>\n' + serializer.serializeToString(clone);
+}
+
+function isIdentity(m) {
+  return m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0;
 }
 
 function removeForeignObjects(node) {

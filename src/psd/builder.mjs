@@ -104,7 +104,7 @@ export async function buildPsd(descriptors, svgRoot, width, height, scale, optio
 
 async function renderAsPixelLayer(desc, svgRoot, width, height, scale) {
   try {
-    const result = renderElement(desc.element, svgRoot, width, height, scale);
+    const result = renderElement(desc.element, svgRoot, width, height, scale, desc.transform);
     if (!result) return null;
 
     const layer = {

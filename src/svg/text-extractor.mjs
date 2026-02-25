@@ -73,10 +73,13 @@ function extractFromText(textEl, transform, viewBox) {
   const fullText = runs.map((r) => r.text).join("");
   const textAnchor = styles["text-anchor"] || "start";
 
+  // 从累积变换矩阵中提取平移分量
+  const { tx, ty } = getTranslation(transform);
+
   return {
     text: fullText,
-    x,
-    y,
+    x: x + tx,
+    y: y + ty,
     runs,
     textAnchor,
     isBox: false,

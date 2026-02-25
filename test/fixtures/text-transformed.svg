@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <!-- 无 transform 的文字（基准对照） -->
+  <text x="50" y="50" font-family="Arial" font-size="24" fill="#333">No Transform</text>
+
+  <!-- 单层 translate 内的文字 -->
+  <g transform="translate(100, 200)">
+    <text x="10" y="30" font-family="Arial" font-size="20" fill="red">Translated Text</text>
+  </g>
+
+  <!-- 嵌套 translate 内的文字 -->
+  <g transform="translate(50, 100)">
+    <g transform="translate(100, 50)">
+      <text x="5" y="20" font-family="Arial" font-size="18" fill="blue">Nested Translate</text>
+    </g>
+  </g>
+
+  <!-- translate 内的 foreignObject -->
+  <g transform="translate(200, 400)">
+    <foreignObject x="10" y="10" width="300" height="50">
+      <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Arial; font-size: 16px; color: green;">Translated ForeignObject</div>
+    </foreignObject>
+  </g>
+
+  <!-- translate 内的多 tspan 文字 -->
+  <g transform="translate(400, 300)">
+    <text x="0" y="30" font-family="Arial" font-size="22" fill="#333">
+      <tspan font-weight="bold" fill="#ff6b35">Bold</tspan>
+      <tspan font-size="16" fill="#00d2ff"> and Small</tspan>
+    </text>
+  </g>
+
+  <!-- 带 text-anchor="middle" 的 translate 文字 -->
+  <g transform="translate(400, 500)">
+    <text x="100" y="30" text-anchor="middle" font-family="Georgia" font-size="28" fill="#7b2ff7">Centered</text>
+  </g>
+</svg>
