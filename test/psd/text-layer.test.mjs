@@ -37,7 +37,7 @@ describe("buildTextLayer", () => {
     assert.ok(layer.text.style);
   });
 
-  it("box text (foreignObject) → shapeType=box + boxBounds", () => {
+  it("foreignObject → point text（兼容 Affinity 等非 Photoshop 工具）", () => {
     const { desc, svg } = makeTextDesc(
       `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
         <foreignObject x="10" y="20" width="200" height="100">
@@ -47,10 +47,10 @@ describe("buildTextLayer", () => {
     );
     const layer = buildTextLayer(desc, svg, 400, 200, 1);
     assert.ok(layer);
-    assert.strictEqual(layer.text.shapeType, "box");
-    assert.ok(layer.text.boxBounds);
-    assert.strictEqual(layer.text.boxBounds.left, 10);
-    assert.strictEqual(layer.text.boxBounds.top, 20);
+    assert.strictEqual(layer.text.text, "Hello Box");
+    // 不使用 box text，确保 Affinity 兼容
+    assert.strictEqual(layer.text.shapeType, undefined);
+    assert.strictEqual(layer.text.boxBounds, undefined);
   });
 
   it("viewBox offset 正确应用到坐标", () => {

@@ -57,17 +57,8 @@ export function buildTextLayer(desc, svgRoot, width, height, scale) {
     layer.text.styleRuns = styleRuns;
   }
 
-  // Box text (foreignObject)
-  if (info.isBox && info.boxBounds) {
-    const bb = info.boxBounds;
-    layer.text.shapeType = "box";
-    layer.text.boxBounds = {
-      top: (bb.y - vbY) * scale,
-      left: (bb.x - vbX) * scale,
-      bottom: (bb.y - vbY + bb.height) * scale,
-      right: (bb.x - vbX + bb.width) * scale,
-    };
-  }
+  // Point text: 不使用 box text（shapeType: "box"），
+  // 因为 Affinity 等非 Photoshop 工具不支持渲染 box text
 
   // 通用属性
   if (desc.opacity !== undefined && desc.opacity < 1) {
