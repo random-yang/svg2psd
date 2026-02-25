@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { toPsdOpacity, toPsdBlendMode, BLEND_MODE_MAP } from "../../src/psd/effects.mjs";
 
