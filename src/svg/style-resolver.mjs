@@ -7,7 +7,7 @@
 const INHERITABLE = new Set([
   "fill", "fill-opacity", "stroke", "stroke-opacity", "stroke-width",
   "font-family", "font-size", "font-weight", "font-style",
-  "text-anchor", "text-decoration", "letter-spacing", "word-spacing",
+  "text-anchor", "text-decoration", "letter-spacing", "word-spacing", "line-height",
   "color", "direction", "writing-mode", "dominant-baseline",
   "visibility", "opacity",
 ]);
