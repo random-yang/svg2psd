@@ -3,8 +3,6 @@
  * 将 LayerDescriptor 树转换为 ag-psd 图层树
  */
 
-import { renderElement } from "../render/renderer.mjs";
-
 /** SVG blend mode → PSD blend mode 映射 */
 const BLEND_MODE_MAP = {
   normal: "normal",
@@ -35,12 +33,13 @@ const BLEND_MODE_MAP = {
  * @param {Object} options
  * @param {Function} [options.buildTextLayer] - 文字图层构建函数
  * @param {Function} [options.onProgress] - 进度回调 (current, total)
+ * @param {Function} options.renderElement - 渲染函数（依赖注入）
  * @returns {Promise<Object>} ag-psd 文档对象
  */
 export async function buildPsd(descriptors, svgRoot, width, height, scale, options = {}) {
   const psdW = Math.round(width * scale);
   const psdH = Math.round(height * scale);
-  const { buildTextLayer, onProgress } = options;
+  const { buildTextLayer, onProgress, renderElement } = options;
 
   let completed = 0;
   const total = countLayers(descriptors);
@@ -80,11 +79,11 @@ export async function buildPsd(descriptors, svgRoot, width, height, scale, optio
         return buildTextLayer(desc, svgRoot, width, height, scale);
       }
       // 文字没有 builder 时回退为像素渲染
-      return renderAsPixelLayer(desc, svgRoot, width, height, scale);
+      return renderAsPixelLayer(desc, svgRoot, width, height, scale, renderElement);
     }
 
     if (desc.type === "graphic") {
-      const layer = await renderAsPixelLayer(desc, svgRoot, width, height, scale);
+      const layer = await renderAsPixelLayer(desc, svgRoot, width, height, scale, renderElement);
       completed++;
       if (onProgress) onProgress(completed, total);
       return layer;
@@ -102,7 +101,7 @@ export async function buildPsd(descriptors, svgRoot, width, height, scale, optio
   };
 }
 
-async function renderAsPixelLayer(desc, svgRoot, width, height, scale) {
+async function renderAsPixelLayer(desc, svgRoot, width, height, scale, renderElement) {
   try {
     const result = renderElement(desc.element, svgRoot, width, height, scale, desc.transform);
     if (!result) return null;

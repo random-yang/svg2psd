@@ -1,10 +1,11 @@
 /**
- * SVG 解析与验证模块
+ * SVG 解析与验证模块（Node.js 版）
  * 读取 SVG 文件，提取 viewBox 和尺寸信息
  */
 
 import fs from "fs";
 import { DOMParser } from "@xmldom/xmldom";
+import { parseSvgFromDocument } from "../core/parser-core.mjs";
 
 /**
  * 解析 SVG 文件，返回 DOM 文档和画布尺寸
@@ -33,26 +34,6 @@ export function parseSvgString(xml) {
     throw new Error(`SVG 解析错误: ${errors[0]}`);
   }
 
-  const svg = doc.documentElement;
-  if (!svg || svg.nodeName !== "svg") {
-    throw new Error("无效的 SVG 文件：缺少 <svg> 根元素");
-  }
-
-  const viewBox = parseViewBox(svg.getAttribute("viewBox"));
-  const width = parseFloat(svg.getAttribute("width")) || (viewBox ? viewBox.w : 800);
-  const height = parseFloat(svg.getAttribute("height")) || (viewBox ? viewBox.h : 600);
-
-  return { doc, svg, width, height, viewBox, xml };
-}
-
-/**
- * 解析 viewBox 属性
- * @param {string|null} attr
- * @returns {{ x: number, y: number, w: number, h: number } | null}
- */
-function parseViewBox(attr) {
-  if (!attr) return null;
-  const parts = attr.split(/[\s,]+/).map(Number);
-  if (parts.length < 4 || parts.some(isNaN)) return null;
-  return { x: parts[0], y: parts[1], w: parts[2], h: parts[3] };
+  const result = parseSvgFromDocument(doc);
+  return { ...result, xml };
 }

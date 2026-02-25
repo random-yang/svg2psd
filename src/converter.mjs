@@ -1,16 +1,15 @@
 /**
- * 主编排模块
+ * 主编排模块（Node.js 版）
  * parse → walk → render → writePSD
  */
 
 import fs from "fs";
 import { initializeCanvas, writePsdBuffer } from "ag-psd";
 import { parseSvg } from "./svg/parser.mjs";
-import { walkSvg } from "./svg/walker.mjs";
-import { buildPsd } from "./psd/builder.mjs";
 import { buildTextLayer } from "./psd/text-layer.mjs";
-import { extractTextInfo } from "./svg/text-extractor.mjs";
 import { validateInput } from "./utils/validation.mjs";
+import { renderElement } from "./render/renderer.mjs";
+import { convertSvg } from "./core/converter-core.mjs";
 
 // 初始化 ag-psd：提供最小化 canvas 实现（仅用于 imageData 写入）
 function createMinimalCanvas(width, height) {
@@ -96,21 +95,11 @@ export async function convertSvgToPsd(inputPath, outputPath, options = {}) {
   const { svg, width, height, viewBox } = parseSvg(inputPath);
   console.log(`解析: ${inputPath} (${Math.round(width)}×${Math.round(height)})`);
 
-  // 2. 递归遍历，生成 LayerDescriptor 树
-  const descriptors = walkSvg(svg);
-  const layerCount = countAllLayers(descriptors);
-  console.log(`图层树: ${layerCount} 个图层`);
-
-  if (layerCount === 0) {
-    throw new Error("SVG 中没有可渲染的元素");
-  }
-
-  // 3. 提取文字信息（增强 text 类型的 descriptors）
-  enrichTextDescriptors(descriptors, svg, viewBox);
-
-  // 4. 构建 PSD
+  // 2. 核心转换
   let completed = 0;
-  const psd = await buildPsd(descriptors, svg, width, height, scale, {
+  const { psd, layerCount } = await convertSvg(svg, width, height, viewBox, {
+    scale,
+    renderElement,
     buildTextLayer: (desc, svgRoot, w, h, s) =>
       buildTextLayer(desc, svgRoot, w, h, s),
     onProgress: (current, total) => {
@@ -119,15 +108,13 @@ export async function convertSvgToPsd(inputPath, outputPath, options = {}) {
     },
   });
 
+  console.log(`图层树: ${layerCount} 个图层`);
+
   if (completed > 0) {
     process.stdout.write("\n");
   }
 
-  if (!psd.children || psd.children.length === 0) {
-    throw new Error("没有成功渲染的图层");
-  }
-
-  // 5. 写入 PSD
+  // 3. 写入 PSD
   const buffer = writePsdBuffer(psd, {
     invalidateTextLayers: true,
     generateThumbnail: true,
@@ -140,29 +127,4 @@ export async function convertSvgToPsd(inputPath, outputPath, options = {}) {
   console.log(`完成: ${outputPath} (${psd.width}×${psd.height}, ${psd.children.length} 个顶层图层)`);
 
   return outputPath;
-}
-
-/**
- * 递归为 text 类型的 descriptor 填充 textInfo
- */
-function enrichTextDescriptors(descriptors, svgRoot, viewBox) {
-  for (const desc of descriptors) {
-    if (desc.type === "group" && desc.children) {
-      enrichTextDescriptors(desc.children, svgRoot, viewBox);
-    } else if (desc.type === "text" && desc.element) {
-      desc.textInfo = extractTextInfo(desc.element, desc.transform, viewBox);
-    }
-  }
-}
-
-function countAllLayers(descriptors) {
-  let count = 0;
-  for (const desc of descriptors) {
-    if (desc.type === "group" && desc.children) {
-      count += countAllLayers(desc.children);
-    } else {
-      count++;
-    }
-  }
-  return count;
 }
