@@ -1,0 +1,4 @@
+cairosvg
+Pillow
+numpy
+pytoshop
