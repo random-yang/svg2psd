@@ -1,5 +1,6 @@
 {
   "name": "svg2psd",
+  "packageManager": "pnpm@10.30.2",
   "version": "1.0.0",
   "description": "",
   "main": "src/index.mjs",
