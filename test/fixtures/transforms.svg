@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <g transform="translate(100, 100)">
+    <rect width="50" height="50" fill="red"/>
+  </g>
+  <g transform="rotate(45, 200, 200)">
+    <rect x="175" y="175" width="50" height="50" fill="blue"/>
+  </g>
+  <g transform="scale(2)">
+    <rect x="10" y="300" width="20" height="20" fill="green"/>
+  </g>
+  <g transform="translate(300, 0) rotate(30) scale(1.5)">
+    <rect width="40" height="40" fill="purple"/>
+  </g>
+</svg>
