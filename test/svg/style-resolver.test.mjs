@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { DOMParser } from "@xmldom/xmldom";
 import { parseStyleAttr, getStyleValue, resolveStyles } from "../../src/svg/style-resolver.mjs";

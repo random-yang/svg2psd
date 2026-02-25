@@ -1,4 +1,4 @@
-import { describe, it, after } from "node:test";
+import { describe, it, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
@@ -16,7 +16,7 @@ if (!fs.existsSync(outputDir)) {
 
 const outputs = [];
 
-after(() => {
+afterAll(() => {
   for (const f of outputs) {
     try { fs.unlinkSync(f); } catch {}
   }

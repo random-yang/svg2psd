@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
@@ -12,12 +12,12 @@ describe("validateInput", () => {
   const tmpEmpty = path.join(fixturesDir, "__empty_test.svg");
   const tmpTxt = path.join(fixturesDir, "__test.txt");
 
-  before(() => {
+  beforeAll(() => {
     fs.writeFileSync(tmpEmpty, "");
     fs.writeFileSync(tmpTxt, "hello");
   });
 
-  after(() => {
+  afterAll(() => {
     try { fs.unlinkSync(tmpEmpty); } catch {}
     try { fs.unlinkSync(tmpTxt); } catch {}
   });

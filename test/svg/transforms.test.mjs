@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { identity, parseTransform, multiply, transformPoint, getTranslation } from "../../src/svg/transforms.mjs";
 

@@ -104,15 +104,11 @@ export async function convertSvgToPsd(inputPath, outputPath, options = {}) {
       buildTextLayer(desc, svgRoot, w, h, s),
     onProgress: (current, total) => {
       completed = current;
-      process.stdout.write(`\r  渲染: ${current}/${total} 图层`);
+      console.log(`  渲染: ${current}/${total} 图层`);
     },
   });
 
   console.log(`图层树: ${layerCount} 个图层`);
-
-  if (completed > 0) {
-    process.stdout.write("\n");
-  }
 
   // 3. 写入 PSD
   const buffer = writePsdBuffer(psd, {
