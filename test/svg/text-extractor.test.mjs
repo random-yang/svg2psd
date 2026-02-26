@@ -169,6 +169,33 @@ describe("extractTextInfo", () => {
     assert.strictEqual(info.runs[0].lineHeight, 30); // 20 * 1.5
   });
 
+  it("<foreignObject> 多个 <p> 产生换行符", () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+      <foreignObject x="10" y="20" width="200" height="100">
+        <div xmlns="http://www.w3.org/1999/xhtml">
+          <p>Line one</p>
+          <p>Line two</p>
+        </div>
+      </foreignObject>
+    </svg>`;
+    const { el, viewBox } = getTextElement(svg);
+    const info = extractTextInfo(el, identity(), viewBox);
+    assert.ok(info);
+    assert.strictEqual(info.text, "Line one\rLine two");
+  });
+
+  it("<foreignObject> <br> 产生换行符", () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+      <foreignObject x="10" y="20" width="200" height="100">
+        <div xmlns="http://www.w3.org/1999/xhtml">Hello<br/>World</div>
+      </foreignObject>
+    </svg>`;
+    const { el, viewBox } = getTextElement(svg);
+    const info = extractTextInfo(el, identity(), viewBox);
+    assert.ok(info);
+    assert.strictEqual(info.text, "Hello\rWorld");
+  });
+
   it("<foreignObject> 应用 translate 变换到坐标", () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
       <foreignObject x="10" y="10" width="200" height="50">

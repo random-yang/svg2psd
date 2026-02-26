@@ -116,7 +116,8 @@ function buildRun(text, styles) {
 }
 
 function extractFromForeignObject(foEl, transform, viewBox) {
-  const raw = getAllText(foEl).trim();
+  // 清理首尾空白，但保留内部的 \r 换行符
+  const raw = getAllText(foEl).replace(/^[\s\r]+|[\s\r]+$/g, "");
   if (!raw) return null;
 
   const foX = parseFloat(foEl.getAttribute("x") || "0");
@@ -229,6 +230,9 @@ function findDirectChildren(node, tagName) {
   return result;
 }
 
+/** 块级 HTML 标签，遇到时需要插入换行 */
+const BLOCK_TAGS = new Set(["p", "div", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "tr"]);
+
 function getAllText(el) {
   let text = "";
   const children = el.childNodes || [];
@@ -237,7 +241,19 @@ function getAllText(el) {
     if (c.nodeType === 3 || c.nodeType === 4) {
       text += c.nodeValue;
     } else if (c.nodeType === 1) {
-      text += getAllText(c);
+      const tag = localName(c);
+      if (tag === "br") {
+        text += "\r";
+      } else if (BLOCK_TAGS.has(tag)) {
+        // 块级元素前：清理尾部空白并插入换行
+        if (text.length > 0) {
+          text = text.replace(/[\s]+$/, "");
+          if (!text.endsWith("\r")) text += "\r";
+        }
+        text += getAllText(c);
+      } else {
+        text += getAllText(c);
+      }
     }
   }
   return text;
