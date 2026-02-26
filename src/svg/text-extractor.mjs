@@ -17,6 +17,8 @@ import { cleanFontFamily, toPostScriptName, isBoldWeight } from "../utils/font.m
  * @property {string} fontWeight
  * @property {boolean} fauxBold
  * @property {{ r:number, g:number, b:number }} fillColor
+ * @property {number|null} letterSpacing - px 值，null 表示 normal/未设置
+ * @property {number|null} lineHeight - px 值（已计算），null 表示未设置
  */
 
 /**
@@ -97,6 +99,8 @@ function buildRun(text, styles) {
   const fontWeight = styles["font-weight"] || "normal";
   const fontSize = parseFloat(styles["font-size"] || "24");
   const fill = styles["fill"] || styles["color"] || "#000000";
+  const letterSpacing = parseSpacing(styles["letter-spacing"]);
+  const lineHeight = parseLineHeight(styles["line-height"], fontSize);
 
   return {
     text,
@@ -106,11 +110,14 @@ function buildRun(text, styles) {
     fontWeight,
     fauxBold: isBoldWeight(fontWeight),
     fillColor: parseColor(fill),
+    letterSpacing,
+    lineHeight,
   };
 }
 
 function extractFromForeignObject(foEl, transform, viewBox) {
-  const raw = getAllText(foEl).trim();
+  // 清理首尾空白，但保留内部的 \r 换行符
+  const raw = getAllText(foEl).replace(/^[\s\r]+|[\s\r]+$/g, "");
   if (!raw) return null;
 
   const foX = parseFloat(foEl.getAttribute("x") || "0");
@@ -136,6 +143,8 @@ function extractFromForeignObject(foEl, transform, viewBox) {
     fontWeight,
     fauxBold: isBoldWeight(fontWeight),
     fillColor: parseColor(fill),
+    letterSpacing: styleInfo.letterSpacing ?? null,
+    lineHeight: styleInfo.lineHeight ?? null,
   };
 
   return {
@@ -164,6 +173,10 @@ function extractForeignObjectStyle(foEl) {
       if (map["font-size"]) result.fontSize = parseFloat(map["font-size"]);
       if (map["font-weight"]) result.fontWeight = map["font-weight"];
       if (map["color"]) result.color = map["color"];
+      const ls = parseSpacing(map["letter-spacing"]);
+      if (ls != null) result.letterSpacing = ls;
+      const lh = parseLineHeight(map["line-height"], result.fontSize);
+      if (lh != null) result.lineHeight = lh;
     }
     const ff = el.getAttribute && el.getAttribute("font-family");
     if (ff) result.fontFamily = cleanFontFamily(ff);
@@ -171,6 +184,30 @@ function extractForeignObjectStyle(foEl) {
     if (fs) result.fontSize = parseFloat(fs);
   });
   return result;
+}
+
+/**
+ * 解析 letter-spacing / word-spacing 等间距值
+ * "20px" → 20, "normal" → null, undefined → null
+ */
+function parseSpacing(val) {
+  if (!val || val === "normal") return null;
+  const n = parseFloat(val);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * 解析 line-height
+ * "1.35" → fontSize*1.35, "20px" → 20, "normal" → null
+ */
+function parseLineHeight(val, fontSize) {
+  if (!val || val === "normal") return null;
+  const n = parseFloat(val);
+  if (!Number.isFinite(n)) return null;
+  // 带 px 单位的绝对值
+  if (String(val).includes("px")) return n;
+  // 无单位倍数，转为 px
+  return fontSize ? n * fontSize : null;
 }
 
 function walkElements(node, fn) {
@@ -193,6 +230,9 @@ function findDirectChildren(node, tagName) {
   return result;
 }
 
+/** 块级 HTML 标签，遇到时需要插入换行 */
+const BLOCK_TAGS = new Set(["p", "div", "br", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre", "tr"]);
+
 function getAllText(el) {
   let text = "";
   const children = el.childNodes || [];
@@ -201,7 +241,19 @@ function getAllText(el) {
     if (c.nodeType === 3 || c.nodeType === 4) {
       text += c.nodeValue;
     } else if (c.nodeType === 1) {
-      text += getAllText(c);
+      const tag = localName(c);
+      if (tag === "br") {
+        text += "\r";
+      } else if (BLOCK_TAGS.has(tag)) {
+        // 块级元素前：清理尾部空白并插入换行
+        if (text.length > 0) {
+          text = text.replace(/[\s]+$/, "");
+          if (!text.endsWith("\r")) text += "\r";
+        }
+        text += getAllText(c);
+      } else {
+        text += getAllText(c);
+      }
     }
   }
   return text;

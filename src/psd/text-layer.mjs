@@ -45,6 +45,13 @@ export function buildTextLayer(desc, svgRoot, width, height, scale) {
         fontSize: (firstRun.fontSize || 24) * scale,
         fillColor: firstRun.fillColor || { r: 0, g: 0, b: 0 },
         fauxBold: firstRun.fauxBold || false,
+        ...(firstRun.letterSpacing != null && {
+          tracking: Math.round(firstRun.letterSpacing / firstRun.fontSize * 1000),
+        }),
+        ...(firstRun.lineHeight != null && {
+          autoLeading: false,
+          leading: firstRun.lineHeight * scale,
+        }),
       },
       paragraphStyle: {
         justification: justificationFromAnchor(info.textAnchor),
@@ -81,6 +88,13 @@ function buildStyleRuns(runs, scale) {
       fontSize: run.fontSize * scale,
       fillColor: run.fillColor,
       fauxBold: run.fauxBold,
+      ...(run.letterSpacing != null && {
+        tracking: Math.round(run.letterSpacing / run.fontSize * 1000),
+      }),
+      ...(run.lineHeight != null && {
+        autoLeading: false,
+        leading: run.lineHeight * scale,
+      }),
     },
   }));
 }

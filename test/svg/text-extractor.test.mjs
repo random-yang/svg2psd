@@ -116,6 +116,86 @@ describe("extractTextInfo", () => {
     assert.strictEqual(info.y, 80);
   });
 
+  it("<text> letter-spacing 提取为 px 值", () => {
+    const { el, viewBox } = getTextElement(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><text x="10" y="50" font-family="Arial" font-size="24" letter-spacing="5">Spaced</text></svg>'
+    );
+    const info = extractTextInfo(el, identity(), viewBox);
+    assert.ok(info);
+    assert.strictEqual(info.runs[0].letterSpacing, 5);
+  });
+
+  it("<text> line-height 无单位倍数 → px 值", () => {
+    const { el, viewBox } = getTextElement(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><text x="10" y="50" font-family="Arial" font-size="20" line-height="1.5">Lined</text></svg>'
+    );
+    const info = extractTextInfo(el, identity(), viewBox);
+    assert.ok(info);
+    assert.strictEqual(info.runs[0].lineHeight, 30); // 20 * 1.5
+  });
+
+  it("未设置 letter-spacing / line-height → null", () => {
+    const { el, viewBox } = getTextElement(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><text x="10" y="50" font-family="Arial" font-size="24">Plain</text></svg>'
+    );
+    const info = extractTextInfo(el, identity(), viewBox);
+    assert.ok(info);
+    assert.strictEqual(info.runs[0].letterSpacing, null);
+    assert.strictEqual(info.runs[0].lineHeight, null);
+  });
+
+  it("<foreignObject> 提取 letter-spacing 和 line-height", () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+      <foreignObject x="10" y="20" width="200" height="100">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="font-size: 16px; letter-spacing: 3px; line-height: 24px;">Hello</div>
+      </foreignObject>
+    </svg>`;
+    const { el, viewBox } = getTextElement(svg);
+    const info = extractTextInfo(el, identity(), viewBox);
+    assert.ok(info);
+    assert.strictEqual(info.runs[0].letterSpacing, 3);
+    assert.strictEqual(info.runs[0].lineHeight, 24);
+  });
+
+  it("<foreignObject> line-height 无单位倍数正确转换", () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+      <foreignObject x="10" y="20" width="200" height="100">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="font-size: 20px; line-height: 1.5;">Hello</div>
+      </foreignObject>
+    </svg>`;
+    const { el, viewBox } = getTextElement(svg);
+    const info = extractTextInfo(el, identity(), viewBox);
+    assert.ok(info);
+    assert.strictEqual(info.runs[0].lineHeight, 30); // 20 * 1.5
+  });
+
+  it("<foreignObject> 多个 <p> 产生换行符", () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+      <foreignObject x="10" y="20" width="200" height="100">
+        <div xmlns="http://www.w3.org/1999/xhtml">
+          <p>Line one</p>
+          <p>Line two</p>
+        </div>
+      </foreignObject>
+    </svg>`;
+    const { el, viewBox } = getTextElement(svg);
+    const info = extractTextInfo(el, identity(), viewBox);
+    assert.ok(info);
+    assert.strictEqual(info.text, "Line one\rLine two");
+  });
+
+  it("<foreignObject> <br> 产生换行符", () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+      <foreignObject x="10" y="20" width="200" height="100">
+        <div xmlns="http://www.w3.org/1999/xhtml">Hello<br/>World</div>
+      </foreignObject>
+    </svg>`;
+    const { el, viewBox } = getTextElement(svg);
+    const info = extractTextInfo(el, identity(), viewBox);
+    assert.ok(info);
+    assert.strictEqual(info.text, "Hello\rWorld");
+  });
+
   it("<foreignObject> 应用 translate 变换到坐标", () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
       <foreignObject x="10" y="10" width="200" height="50">

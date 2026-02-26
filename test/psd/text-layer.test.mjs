@@ -74,6 +74,47 @@ describe("buildTextLayer", () => {
     assert.strictEqual(layer.opacity, 0.5);
   });
 
+  it("letter-spacing → tracking 正确转换", () => {
+    const { desc, svg } = makeTextDesc(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><text x="10" y="50" font-family="Arial" font-size="20" letter-spacing="5">Tracked</text></svg>'
+    );
+    const layer = buildTextLayer(desc, svg, 200, 200, 1);
+    assert.ok(layer);
+    // tracking = letterSpacing / fontSize * 1000 = 5 / 20 * 1000 = 250
+    assert.strictEqual(layer.text.style.tracking, 250);
+  });
+
+  it("line-height → leading + autoLeading 正确转换", () => {
+    const { desc, svg } = makeTextDesc(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><text x="10" y="50" font-family="Arial" font-size="20" line-height="1.5">Leaded</text></svg>'
+    );
+    const layer = buildTextLayer(desc, svg, 200, 200, 1);
+    assert.ok(layer);
+    assert.strictEqual(layer.text.style.autoLeading, false);
+    assert.strictEqual(layer.text.style.leading, 30); // 20 * 1.5
+  });
+
+  it("leading 应用 scale 因子", () => {
+    const { desc, svg } = makeTextDesc(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><text x="10" y="50" font-family="Arial" font-size="20" line-height="1.5">Scaled Leading</text></svg>'
+    );
+    const layer = buildTextLayer(desc, svg, 200, 200, 2);
+    assert.ok(layer);
+    assert.strictEqual(layer.text.style.leading, 60); // 30 * 2
+    assert.strictEqual(layer.text.style.autoLeading, false);
+  });
+
+  it("无 letter-spacing/line-height 时不输出 tracking/leading", () => {
+    const { desc, svg } = makeTextDesc(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><text x="10" y="50" font-family="Arial" font-size="24">Plain</text></svg>'
+    );
+    const layer = buildTextLayer(desc, svg, 200, 200, 1);
+    assert.ok(layer);
+    assert.strictEqual(layer.text.style.tracking, undefined);
+    assert.strictEqual(layer.text.style.leading, undefined);
+    assert.strictEqual(layer.text.style.autoLeading, undefined);
+  });
+
   it("scale 因子正确应用到 fontSize 和坐标", () => {
     const { desc, svg } = makeTextDesc(
       '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><text x="10" y="50" font-family="Arial" font-size="24">Scaled</text></svg>'
