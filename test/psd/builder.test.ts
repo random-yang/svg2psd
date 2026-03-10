@@ -1,0 +1,87 @@
+import { describe, it } from "vitest";
+import assert from "node:assert/strict";
+import { parseSvgString } from "../../src/svg/parser.js";
+import { buildPsd } from "../../src/psd/builder.js";
+import type { LayerDescriptor } from "../../src/types.js";
+
+function makeSvgRoot(): Element {
+  const { svg } = parseSvgString('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"></svg>');
+  return svg;
+}
+
+describe("buildPsd", () => {
+  it("hidden descriptor → layer.hidden=true", async () => {
+    const svgRoot = makeSvgRoot();
+    const psd = await buildPsd(
+      [{ type: "graphic", name: "hidden-rect", element: undefined, hidden: true } as LayerDescriptor],
+      svgRoot, 100, 100, 1
+    );
+    const children = (psd as { children: Record<string, unknown>[] }).children;
+    assert.strictEqual(children.length, 1);
+    assert.strictEqual(children[0].hidden, true);
+    assert.strictEqual(children[0].name, "hidden-rect");
+  });
+
+  it("空 descriptors → 无 children", async () => {
+    const svgRoot = makeSvgRoot();
+    const psd = await buildPsd([], svgRoot, 100, 100, 1);
+    assert.strictEqual((psd as { children: unknown[] }).children.length, 0);
+  });
+
+  it("group descriptor → children 数组", async () => {
+    const svgRoot = makeSvgRoot();
+    const psd = await buildPsd(
+      [{
+        type: "group",
+        name: "mygroup",
+        children: [
+          { type: "graphic", name: "child1", element: undefined, hidden: true } as LayerDescriptor,
+          { type: "graphic", name: "child2", element: undefined, hidden: true } as LayerDescriptor,
+        ],
+      }],
+      svgRoot, 100, 100, 1
+    );
+    const children = (psd as { children: Record<string, unknown>[] }).children;
+    assert.strictEqual(children.length, 1);
+    assert.strictEqual(children[0].name, "mygroup");
+    assert.ok(Array.isArray(children[0].children));
+    assert.strictEqual((children[0].children as unknown[]).length, 2);
+  });
+
+  it("opacity/blendMode 正确映射 (hidden layer)", async () => {
+    const svgRoot = makeSvgRoot();
+    const psd = await buildPsd(
+      [{ type: "graphic", name: "styled", element: undefined, hidden: true, opacity: 0.5, blendMode: "multiply" } as LayerDescriptor],
+      svgRoot, 100, 100, 1
+    );
+    const layer = (psd as { children: Record<string, unknown>[] }).children[0];
+    assert.strictEqual(layer.hidden, true);
+    assert.strictEqual(layer.name, "styled");
+  });
+
+  it("group 的 opacity/blendMode 正确映射", async () => {
+    const svgRoot = makeSvgRoot();
+    const psd = await buildPsd(
+      [{
+        type: "group",
+        name: "styled-group",
+        opacity: 0.5,
+        blendMode: "multiply",
+        children: [
+          { type: "graphic", name: "child", element: undefined, hidden: true } as LayerDescriptor,
+        ],
+      }],
+      svgRoot, 100, 100, 1
+    );
+    const layer = (psd as { children: Record<string, unknown>[] }).children[0];
+    assert.strictEqual(layer.opacity, 0.5);
+    assert.strictEqual(layer.blendMode, "multiply");
+  });
+
+  it("width/height 应用 scale", async () => {
+    const svgRoot = makeSvgRoot();
+    const psd = await buildPsd([], svgRoot, 100, 100, 2);
+    assert.strictEqual((psd as { width: number }).width, 200);
+    assert.strictEqual((psd as { height: number }).height, 200);
+  });
+});
