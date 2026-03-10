@@ -75,6 +75,7 @@ initializeCanvas(
     data: new Uint8ClampedArray(width * height * 4),
     width,
     height,
+    colorSpace: "srgb" as const,
   }),
 );
 
@@ -106,7 +107,7 @@ export async function convertSvgToPsd(
 
   console.log(`图层树: ${layerCount} 个图层`);
 
-  const buffer = writePsdBuffer(psd as Parameters<typeof writePsdBuffer>[0], {
+  const buffer = writePsdBuffer(psd as unknown as Parameters<typeof writePsdBuffer>[0], {
     invalidateTextLayers: true,
     generateThumbnail: true,
   });
