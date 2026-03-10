@@ -1,5 +1,6 @@
 import type { Matrix, ViewBox, TextInfo, TextRun } from "../types.js";
-import { parseStyleAttr, resolveStyles } from "./style-resolver.js";
+import { parseStyleAttr, resolveStyles, parseStyleSheet } from "./style-resolver.js";
+import type { CssRule } from "./style-resolver.js";
 import { getTranslation } from "./transforms.js";
 import { parseColor } from "../utils/color.js";
 import { cleanFontFamily, toPostScriptName, isBoldWeight } from "../utils/font.js";
@@ -8,13 +9,15 @@ export function extractTextInfo(
   el: Element,
   transform: Matrix,
   viewBox: ViewBox | null,
+  svgRoot?: Element,
 ): TextInfo | null {
+  const stylesheet = svgRoot ? parseStyleSheet(svgRoot) : [];
   const tag = localName(el);
   if (tag === "text") {
-    return extractFromText(el, transform, viewBox);
+    return extractFromText(el, transform, viewBox, stylesheet);
   }
   if (tag === "foreignObject") {
-    return extractFromForeignObject(el, transform, viewBox);
+    return extractFromForeignObject(el, transform, viewBox, stylesheet);
   }
   return null;
 }
@@ -23,16 +26,17 @@ function extractFromText(
   textEl: Element,
   transform: Matrix,
   _viewBox: ViewBox | null,
+  stylesheet: CssRule[],
 ): TextInfo | null {
   const x = parseFloat(textEl.getAttribute("x") || "0");
   const y = parseFloat(textEl.getAttribute("y") || "0");
-  const styles = resolveStyles(textEl);
+  const styles = resolveStyles(textEl, {}, stylesheet);
 
   const tspans = findDirectChildren(textEl, "tspan");
   let runs: TextRun[];
 
   if (tspans.length > 0) {
-    runs = tspans.map((tspan) => extractRunFromTspan(tspan, styles));
+    runs = tspans.map((tspan) => extractRunFromTspan(tspan, styles, stylesheet));
   } else {
     const text = getAllText(textEl).trim();
     if (!text) return null;
@@ -57,9 +61,9 @@ function extractFromText(
   };
 }
 
-function extractRunFromTspan(tspan: Element, parentStyles: Record<string, string>): TextRun {
+function extractRunFromTspan(tspan: Element, parentStyles: Record<string, string>, stylesheet: CssRule[]): TextRun {
   const text = getAllText(tspan).trim();
-  const styles = resolveStyles(tspan, parentStyles);
+  const styles = resolveStyles(tspan, parentStyles, stylesheet);
   return buildRun(text, styles);
 }
 
@@ -88,6 +92,7 @@ function extractFromForeignObject(
   foEl: Element,
   transform: Matrix,
   _viewBox: ViewBox | null,
+  stylesheet: CssRule[],
 ): TextInfo | null {
   const raw = getAllText(foEl).replace(/^[\s\r]+|[\s\r]+$/g, "");
   if (!raw) return null;
@@ -99,7 +104,7 @@ function extractFromForeignObject(
 
   const { tx, ty } = getTranslation(transform);
 
-  const styleInfo = extractForeignObjectStyle(foEl);
+  const styleInfo = extractForeignObjectStyle(foEl, stylesheet);
   const fontFamily = styleInfo.fontFamily || "Inter";
   const fontWeight = styleInfo.fontWeight || "normal";
   const fontSize = styleInfo.fontSize || 24;
@@ -142,25 +147,19 @@ interface ForeignObjectStyleInfo {
   lineHeight?: number | null;
 }
 
-function extractForeignObjectStyle(foEl: Element): ForeignObjectStyleInfo {
+function extractForeignObjectStyle(foEl: Element, stylesheet: CssRule[]): ForeignObjectStyleInfo {
   const result: ForeignObjectStyleInfo = {};
   walkElements(foEl, (el) => {
-    const style = el.getAttribute && el.getAttribute("style");
-    if (style) {
-      const map = parseStyleAttr(style);
-      if (map["font-family"]) result.fontFamily = cleanFontFamily(map["font-family"]);
-      if (map["font-size"]) result.fontSize = parseFloat(map["font-size"]);
-      if (map["font-weight"]) result.fontWeight = map["font-weight"];
-      if (map["color"]) result.color = map["color"];
-      const ls = parseSpacing(map["letter-spacing"]);
-      if (ls != null) result.letterSpacing = ls;
-      const lh = parseLineHeight(map["line-height"], result.fontSize);
-      if (lh != null) result.lineHeight = lh;
-    }
-    const ff = el.getAttribute && el.getAttribute("font-family");
-    if (ff) result.fontFamily = cleanFontFamily(ff);
-    const fs = el.getAttribute && el.getAttribute("font-size");
-    if (fs) result.fontSize = parseFloat(fs);
+    // 先从 CSS stylesheet 获取样式
+    const cssStyles = resolveStyles(el, {}, stylesheet);
+    if (cssStyles["font-family"]) result.fontFamily = cleanFontFamily(cssStyles["font-family"]);
+    if (cssStyles["font-size"]) result.fontSize = parseFloat(cssStyles["font-size"]);
+    if (cssStyles["font-weight"]) result.fontWeight = cssStyles["font-weight"];
+    if (cssStyles["color"]) result.color = cssStyles["color"];
+    const ls = parseSpacing(cssStyles["letter-spacing"]);
+    if (ls != null) result.letterSpacing = ls;
+    const lh = parseLineHeight(cssStyles["line-height"], result.fontSize);
+    if (lh != null) result.lineHeight = lh;
   });
   return result;
 }

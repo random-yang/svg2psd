@@ -5,14 +5,14 @@ import { extractTextInfo } from "../../src/svg/text-extractor.js";
 import { identity, parseTransform, multiply } from "../../src/svg/transforms.js";
 import type { ViewBox } from "../../src/types.js";
 
-function getTextElement(svgStr: string): { el: Element; viewBox: ViewBox | null } | null {
+function getTextElement(svgStr: string): { el: Element; svg: Element; viewBox: ViewBox | null } | null {
   const { svg, viewBox } = parseSvgString(svgStr);
   const children = svg.childNodes;
   for (let i = 0; i < children.length; i++) {
     const node = children[i];
     if (node.nodeType === 1) {
       const tag = ((node as Element).localName || node.nodeName || "").replace(/^.*:/, "");
-      if (tag === "text" || tag === "foreignObject") return { el: node as Element, viewBox };
+      if (tag === "text" || tag === "foreignObject") return { el: node as Element, svg, viewBox };
     }
   }
   return null;
@@ -210,5 +210,57 @@ describe("extractTextInfo", () => {
     assert.strictEqual(info.x, 210);
     assert.strictEqual(info.boxBounds!.x, 210);
     assert.strictEqual(info.boxBounds!.y, 410);
+  });
+
+  it("CSS <style> 类选择器: <text> 字体和颜色", () => {
+    const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">
+      <style>.title { font-family: Georgia; font-size: 32px; fill: #ff0000 }</style>
+      <text class="title" x="10" y="50">Styled</text>
+    </svg>`;
+    const { el, svg, viewBox } = getTextElement(svgStr)!;
+    const info = extractTextInfo(el, identity(), viewBox, svg);
+    assert.ok(info);
+    assert.strictEqual(info.runs[0].fontFamily, "Georgia");
+    assert.strictEqual(info.runs[0].fontSize, 32);
+    assert.deepStrictEqual(info.runs[0].fillColor, { r: 255, g: 0, b: 0 });
+  });
+
+  it("CSS <style> 类选择器: <text> letter-spacing 和 line-height", () => {
+    const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">
+      <style>.spaced { font-size: 20px; letter-spacing: 4px; line-height: 1.8 }</style>
+      <text class="spaced" x="10" y="50">Spaced</text>
+    </svg>`;
+    const { el, svg, viewBox } = getTextElement(svgStr)!;
+    const info = extractTextInfo(el, identity(), viewBox, svg);
+    assert.ok(info);
+    assert.strictEqual(info.runs[0].letterSpacing, 4);
+    assert.strictEqual(info.runs[0].lineHeight, 36);
+  });
+
+  it("CSS <style> 类选择器: inline style 优先于 CSS", () => {
+    const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">
+      <style>.label { fill: blue; font-size: 20px }</style>
+      <text class="label" x="10" y="50" style="fill: green">Override</text>
+    </svg>`;
+    const { el, svg, viewBox } = getTextElement(svgStr)!;
+    const info = extractTextInfo(el, identity(), viewBox, svg);
+    assert.ok(info);
+    assert.deepStrictEqual(info.runs[0].fillColor, { r: 0, g: 128, b: 0 });
+    assert.strictEqual(info.runs[0].fontSize, 20);
+  });
+
+  it("CSS <style> 类选择器: <foreignObject> 字体样式", () => {
+    const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+      <style>.box-text { font-family: Helvetica; font-size: 18px; color: #00ff00 }</style>
+      <foreignObject x="10" y="20" width="200" height="100">
+        <div xmlns="http://www.w3.org/1999/xhtml" class="box-text">Styled Box</div>
+      </foreignObject>
+    </svg>`;
+    const { el, svg, viewBox } = getTextElement(svgStr)!;
+    const info = extractTextInfo(el, identity(), viewBox, svg);
+    assert.ok(info);
+    assert.strictEqual(info.runs[0].fontFamily, "Helvetica");
+    assert.strictEqual(info.runs[0].fontSize, 18);
+    assert.deepStrictEqual(info.runs[0].fillColor, { r: 0, g: 255, b: 0 });
   });
 });

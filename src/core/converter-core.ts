@@ -43,7 +43,7 @@ export function enrichTextDescriptors(
     if (desc.type === "group" && desc.children) {
       enrichTextDescriptors(desc.children, svgRoot, viewBox);
     } else if (desc.type === "text" && desc.element) {
-      desc.textInfo = extractTextInfo(desc.element, desc.transform!, viewBox);
+      desc.textInfo = extractTextInfo(desc.element, desc.transform!, viewBox, svgRoot);
     }
   }
 }

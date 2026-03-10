@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+  <style>
+    .bg { fill: #f0f4f8 }
+    .card { fill: white; stroke: #e2e8f0; stroke-width: 1 }
+    .title { font-family: Georgia, serif; font-size: 28px; fill: #1a202c; font-weight: bold }
+    .subtitle { font-family: Arial, sans-serif; font-size: 16px; fill: #718096; letter-spacing: 2px }
+    .body-text { font-family: Arial, sans-serif; font-size: 14px; fill: #4a5568; line-height: 1.6 }
+    .accent { fill: #4299e1 }
+    .accent-dark { fill: #2b6cb0 }
+    .badge { fill: #48bb78; opacity: 0.9 }
+    .badge-text { font-family: Arial, sans-serif; font-size: 12px; fill: white; font-weight: bold }
+    .divider { stroke: #e2e8f0; stroke-width: 1 }
+    .hidden-element { display: none }
+    .semi-transparent { opacity: 0.3 }
+  </style>
+
+  <!-- Background -->
+  <rect class="bg" width="600" height="400"/>
+
+  <!-- Card -->
+  <rect class="card" x="40" y="30" width="520" height="340" rx="12"/>
+
+  <!-- Accent bar -->
+  <rect class="accent" x="40" y="30" width="520" height="8" rx="4"/>
+
+  <!-- Title -->
+  <text class="title" x="70" y="85">CSS Style Support Demo</text>
+
+  <!-- Subtitle with letter-spacing -->
+  <text class="subtitle" x="70" y="115">POWERED BY SVG2PSD</text>
+
+  <!-- Divider -->
+  <line class="divider" x1="70" y1="135" x2="530" y2="135"/>
+
+  <!-- Body text using foreignObject -->
+  <foreignObject x="70" y="150" width="460" height="80">
+    <div xmlns="http://www.w3.org/1999/xhtml" class="body-text">
+      <p>This SVG uses CSS class selectors defined in a style block.</p>
+      <p>Font families, sizes, colors, and spacing are all applied via CSS classes.</p>
+    </div>
+  </foreignObject>
+
+  <!-- Shapes with CSS styles -->
+  <circle class="accent" cx="100" cy="280" r="30"/>
+  <circle class="accent-dark" cx="180" cy="280" r="30"/>
+  <rect class="badge" x="240" y="255" width="80" height="30" rx="15"/>
+  <text class="badge-text" x="256" y="275">NEW</text>
+
+  <!-- Inline style overrides CSS class -->
+  <rect class="accent" x="350" y="255" width="80" height="50" rx="8" style="fill: #ed8936"/>
+
+  <!-- Semi-transparent element -->
+  <rect class="semi-transparent accent" x="460" y="255" width="80" height="50" rx="8"/>
+
+  <!-- This should be hidden in PSD -->
+  <rect class="hidden-element" x="0" y="0" width="600" height="400" fill="red"/>
+
+  <!-- Footer text -->
+  <text class="body-text" x="70" y="360">All styles above are applied via CSS &lt;style&gt; class selectors.</text>
+</svg>
