@@ -83,4 +83,30 @@ describe("walkSvg", () => {
     assert.strictEqual(descs.length, 1);
     assert.strictEqual(descs[0].type, "graphic");
   });
+
+  it("CSS <style> 类选择器: opacity", () => {
+    const descs = walk('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><style>.half { opacity: 0.5 }</style><rect class="half" width="50" height="50" fill="red"/></svg>');
+    assert.strictEqual(descs.length, 1);
+    assert.strictEqual(descs[0].opacity, 0.5);
+  });
+
+  it("CSS <style> 类选择器: display:none → hidden", () => {
+    const descs = walk('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><style>.hidden { display: none }</style><rect class="hidden" width="50" height="50" fill="red"/></svg>');
+    assert.strictEqual(descs[0].hidden, true);
+  });
+
+  it("CSS <style> 类选择器: visibility:hidden → hidden", () => {
+    const descs = walk('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><style>.invisible { visibility: hidden }</style><rect class="invisible" width="50" height="50" fill="red"/></svg>');
+    assert.strictEqual(descs[0].hidden, true);
+  });
+
+  it("CSS <style> 类选择器: mix-blend-mode", () => {
+    const descs = walk('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><style>.blend { mix-blend-mode: multiply }</style><rect class="blend" width="50" height="50" fill="red"/></svg>');
+    assert.strictEqual(descs[0].blendMode, "multiply");
+  });
+
+  it("inline style 优先于 CSS 类选择器: opacity", () => {
+    const descs = walk('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><style>.half { opacity: 0.5 }</style><rect class="half" style="opacity: 0.8" width="50" height="50" fill="red"/></svg>');
+    assert.strictEqual(descs[0].opacity, 0.8);
+  });
 });

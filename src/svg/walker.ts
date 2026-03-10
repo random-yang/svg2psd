@@ -1,5 +1,7 @@
 import type { Matrix, LayerDescriptor } from "../types.js";
 import { parseTransform, multiply } from "./transforms.js";
+import { parseStyleSheet, getMatchedCssProperties, parseStyleAttr } from "./style-resolver.js";
+import type { CssRule } from "./style-resolver.js";
 
 const SKIP_TAGS = new Set([
   "defs", "style", "metadata", "clipPath", "mask", "pattern",
@@ -13,10 +15,11 @@ const GRAPHIC_TAGS = new Set([
 ]);
 
 export function walkSvg(svg: Element): LayerDescriptor[] {
-  return walkChildren(svg, [1, 0, 0, 1, 0, 0]);
+  const stylesheet = parseStyleSheet(svg);
+  return walkChildren(svg, [1, 0, 0, 1, 0, 0], stylesheet);
 }
 
-function walkChildren(parent: Element, parentTransform: Matrix): LayerDescriptor[] {
+function walkChildren(parent: Element, parentTransform: Matrix, stylesheet: CssRule[]): LayerDescriptor[] {
   const result: LayerDescriptor[] = [];
   const childNodes = parent.childNodes || [];
 
@@ -27,21 +30,21 @@ function walkChildren(parent: Element, parentTransform: Matrix): LayerDescriptor
     const tag = localName(node as Element);
     if (SKIP_TAGS.has(tag)) continue;
 
-    const descriptor = processElement(node as Element, tag, parentTransform);
+    const descriptor = processElement(node as Element, tag, parentTransform, stylesheet);
     if (descriptor) result.push(descriptor);
   }
 
   return result;
 }
 
-function processElement(el: Element, tag: string, parentTransform: Matrix): LayerDescriptor | null {
+function processElement(el: Element, tag: string, parentTransform: Matrix, stylesheet: CssRule[]): LayerDescriptor | null {
   const transform = getAccumulatedTransform(el, parentTransform);
-  const opacity = getOpacity(el);
-  const blendMode = getBlendMode(el);
-  const hidden = isHidden(el);
+  const opacity = getOpacity(el, stylesheet);
+  const blendMode = getBlendMode(el, stylesheet);
+  const hidden = isHidden(el, stylesheet);
 
   if (tag === "g") {
-    return processGroup(el, transform, opacity, blendMode, hidden);
+    return processGroup(el, transform, opacity, blendMode, hidden, stylesheet);
   }
 
   if (tag === "text") {
@@ -83,7 +86,7 @@ function processElement(el: Element, tag: string, parentTransform: Matrix): Laye
   }
 
   if (tag === "svg") {
-    const children = walkChildren(el, transform);
+    const children = walkChildren(el, transform, stylesheet);
     if (children.length === 0) return null;
     return {
       type: "group",
@@ -106,8 +109,9 @@ function processGroup(
   opacity: number,
   blendMode: string | null,
   hidden: boolean,
+  stylesheet: CssRule[],
 ): LayerDescriptor | null {
-  const children = walkChildren(el, transform);
+  const children = walkChildren(el, transform, stylesheet);
 
   if (children.length === 0) return null;
 
@@ -138,27 +142,47 @@ function getAccumulatedTransform(el: Element, parentTransform: Matrix): Matrix {
   return multiply(parentTransform, localTransform);
 }
 
-function getOpacity(el: Element): number {
-  const style = el.getAttribute("style") || "";
-  const opacityMatch = style.match(/(?:^|;)\s*opacity\s*:\s*([\d.]+)/);
-  if (opacityMatch) return parseFloat(opacityMatch[1]);
-  const attr = el.getAttribute("opacity");
-  if (attr) return parseFloat(attr);
+/**
+ * 获取元素的有效样式值（合并 CSS 类选择器 + 表现属性 + inline style）
+ */
+function getComputedStyleValue(el: Element, prop: string, stylesheet: CssRule[]): string | null {
+  // CSS 类选择器（最低优先级）
+  let value: string | null = null;
+  if (stylesheet.length > 0) {
+    const cssProps = getMatchedCssProperties(el, stylesheet);
+    if (cssProps[prop] !== undefined) value = cssProps[prop];
+  }
+
+  // 表现属性（中优先级）
+  const attr = el.getAttribute(prop);
+  if (attr !== null && attr !== undefined && attr !== "") value = attr;
+
+  // inline style（最高优先级）
+  const styleAttr = el.getAttribute("style");
+  if (styleAttr) {
+    const styleMap = parseStyleAttr(styleAttr);
+    if (styleMap[prop] !== undefined) value = styleMap[prop];
+  }
+
+  return value;
+}
+
+function getOpacity(el: Element, stylesheet: CssRule[]): number {
+  const val = getComputedStyleValue(el, "opacity", stylesheet);
+  if (val) return parseFloat(val);
   return 1;
 }
 
-function getBlendMode(el: Element): string | null {
-  const style = el.getAttribute("style") || "";
-  const match = style.match(/mix-blend-mode\s*:\s*([^;]+)/);
-  return match ? match[1].trim() : null;
+function getBlendMode(el: Element, stylesheet: CssRule[]): string | null {
+  const val = getComputedStyleValue(el, "mix-blend-mode", stylesheet);
+  return val ? val.trim() : null;
 }
 
-function isHidden(el: Element): boolean {
-  const style = el.getAttribute("style") || "";
-  if (/visibility\s*:\s*hidden/.test(style)) return true;
-  if (/display\s*:\s*none/.test(style)) return true;
-  if (el.getAttribute("visibility") === "hidden") return true;
-  if (el.getAttribute("display") === "none") return true;
+function isHidden(el: Element, stylesheet: CssRule[]): boolean {
+  const vis = getComputedStyleValue(el, "visibility", stylesheet);
+  if (vis === "hidden") return true;
+  const disp = getComputedStyleValue(el, "display", stylesheet);
+  if (disp === "none") return true;
   return false;
 }
 
