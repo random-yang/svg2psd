@@ -3,3 +3,8 @@ __pycache__/
 *.psd
 /tmp/
 web/dist/
+
+# Rust / WASM
+rust/target/
+pkg/
+pkg-web/

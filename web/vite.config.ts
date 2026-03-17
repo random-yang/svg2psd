@@ -9,7 +9,7 @@ export default defineConfig({
     target: "esnext",
   },
   optimizeDeps: {
-    exclude: ["@resvg/resvg-wasm"],
+    exclude: ["@resvg/resvg-wasm", "svg2psd-wasm"],
   },
   server: {
     headers: {

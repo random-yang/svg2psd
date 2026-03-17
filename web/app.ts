@@ -1,8 +1,15 @@
-import { parseSvgString } from "./platform/parser.js";
-import { init as initRenderer, renderElement } from "./platform/renderer.js";
+// TS engine
+import { parseSvgString as tsParseString } from "./platform/parser.js";
+import { init as tsInitRenderer, renderElement as tsRenderElement } from "./platform/renderer.js";
 import { writePsdBlob, initPsdWriter } from "./platform/psd-writer.js";
-import { convertSvg } from "../src/core/converter-core.js";
-import { buildTextLayer } from "../src/psd/text-layer.js";
+import { convertSvg as tsConvertSvg } from "../src/core/converter-core.js";
+import { buildTextLayer as tsBuildTextLayer } from "../src/psd/text-layer.js";
+
+// Rust engine
+import * as rustEngine from "./engine-rust.js";
+
+type Engine = "ts" | "rust";
+let currentEngine: Engine = "ts";
 
 const dropZone = document.getElementById("dropZone")!;
 const fileInput = document.getElementById("fileInput") as HTMLInputElement;
@@ -14,15 +21,25 @@ const statusText = document.getElementById("statusText")!;
 const downloadBtn = document.getElementById("downloadBtn")!;
 const layerList = document.getElementById("layerList")!;
 const layerItems = document.getElementById("layerItems")!;
+const engineToggle = document.getElementById("engineToggle") as HTMLInputElement;
+const engineLabel = document.getElementById("engineLabel")!;
+const timingEl = document.getElementById("timing")!;
 
 let downloadUrl: string | null = null;
 let downloadFilename = "output.psd";
 
+engineToggle.addEventListener("change", () => {
+  currentEngine = engineToggle.checked ? "rust" : "ts";
+  engineLabel.textContent = currentEngine === "rust" ? "Rust WASM" : "TypeScript";
+  engineLabel.className = `engine-name ${currentEngine}`;
+});
+
 async function initialize(): Promise<void> {
-  showStatus("初始化 WASM 渲染器...");
+  showStatus("初始化 WASM...");
   try {
-    await initRenderer();
+    await tsInitRenderer();
     initPsdWriter();
+    await rustEngine.initRustWasm();
     hideStatus();
   } catch (e) {
     showError(`初始化失败: ${(e as Error).message}`);
@@ -74,27 +91,54 @@ async function handleFile(file: File): Promise<void> {
   downloadFilename = file.name.replace(/\.svg$/i, ".psd");
   hideDownload();
   hideLayerList();
+  timingEl.textContent = "";
 
   try {
     showStatus("读取文件...");
     const text = await file.text();
-
-    showStatus("解析 SVG...");
-    const { svg, width, height, viewBox } = parseSvgString(text);
-
     const scale = parseFloat(scaleInput.value) || 1;
 
-    showStatus("转换中...");
-    const { psd, layerCount } = await convertSvg(svg, width, height, viewBox, {
-      scale,
-      renderElement,
-      buildTextLayer: (desc, svgRoot, w, h, s) => buildTextLayer(desc, svgRoot, w, h, s),
-      onProgress: (current, total) => {
-        const pct = Math.round((current / total) * 100);
-        setProgress(pct);
-        setStatusText(`渲染图层: ${current}/${total}`);
-      },
-    });
+    const t0 = performance.now();
+
+    let psd: Record<string, unknown>;
+    let layerCount: number;
+
+    if (currentEngine === "rust") {
+      showStatus("解析 SVG (Rust)...");
+      const parsed = rustEngine.parseSvgString(text);
+
+      showStatus("转换中 (Rust)...");
+      const result = await rustEngine.convertSvg(text, parsed.width, parsed.height, parsed.viewBox, {
+        scale,
+        onProgress: (current, total) => {
+          const pct = Math.round((current / total) * 100);
+          setProgress(pct);
+          setStatusText(`渲染图层 (Rust): ${current}/${total}`);
+        },
+      });
+      psd = result.psd;
+      layerCount = result.layerCount;
+    } else {
+      showStatus("解析 SVG (TS)...");
+      const { svg, width, height, viewBox } = tsParseString(text);
+
+      showStatus("转换中 (TS)...");
+      const result = await tsConvertSvg(svg, width, height, viewBox, {
+        scale,
+        renderElement: tsRenderElement,
+        buildTextLayer: (desc, svgRoot, w, h, s) => tsBuildTextLayer(desc, svgRoot, w, h, s),
+        onProgress: (current, total) => {
+          const pct = Math.round((current / total) * 100);
+          setProgress(pct);
+          setStatusText(`渲染图层 (TS): ${current}/${total}`);
+        },
+      });
+      psd = result.psd;
+      layerCount = result.layerCount;
+    }
+
+    const t1 = performance.now();
+    const elapsed = (t1 - t0).toFixed(0);
 
     showStatus("生成 PSD 文件...");
     setProgress(100);
@@ -107,6 +151,7 @@ async function handleFile(file: File): Promise<void> {
     const psdObj = psd as { width: number; height: number };
     const sizeMB = (blob.size / 1024 / 1024).toFixed(2);
     setStatusText(`完成! ${psdObj.width}×${psdObj.height}, ${layerCount} 个图层, ${sizeMB} MB`);
+    timingEl.textContent = `${currentEngine === "rust" ? "Rust" : "TS"} 耗时: ${elapsed} ms`;
     showDownload();
     showLayerPreview((psd as { children?: PsdChild[] }).children || []);
   } catch (e) {
