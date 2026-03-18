@@ -9,6 +9,9 @@ import initWasm, {
   buildTextLayer as wasmBuildTextLayer,
   countAllLayers as wasmCountAllLayers,
   buildStandaloneSvgForElement as wasmBuildStandaloneSvg,
+  buildAllStandaloneSvgs as wasmBuildAllStandaloneSvgs,
+  extractSvgParts as wasmExtractSvgParts,
+  processAll as wasmProcessAll,
 } from "../pkg-web/svg2psd_wasm.js";
 import { renderSvgString } from "./platform/renderer.js";
 
@@ -48,21 +51,21 @@ export async function convertSvg(
 ): Promise<ConvertResult> {
   const { scale = 1, onProgress } = options;
 
-  // 1. Walk SVG (Rust WASM)
-  const descriptors = JSON.parse(wasmWalkSvg(svgXml));
-  const layerCount = wasmCountAllLayers(JSON.stringify(descriptors));
+  // Single WASM call: parse + walk + enrich + extract parts (ONE parse pass)
+  const viewBoxJson = viewBox ? JSON.stringify(viewBox) : null;
+  const processed: {
+    width: number; height: number; viewBox: any;
+    layerCount: number; descriptors: any[];
+    prefix: string; elements: Record<string, { xml: string; transform?: number[] }>;
+  } = JSON.parse(wasmProcessAll(svgXml, viewBoxJson, scale));
+
+  const layerCount = processed.layerCount;
+  const enriched = processed.descriptors;
 
   if (layerCount === 0) {
     throw new Error("SVG 中没有可渲染的元素");
   }
 
-  // 2. Enrich text descriptors (Rust WASM)
-  const viewBoxJson = viewBox ? JSON.stringify(viewBox) : null;
-  const enriched = JSON.parse(
-    wasmEnrichTextDescriptors(JSON.stringify(descriptors), svgXml, viewBoxJson),
-  );
-
-  // 3. Build PSD layers
   const psdW = Math.round(width * scale);
   const psdH = Math.round(height * scale);
   let completed = 0;
@@ -70,6 +73,20 @@ export async function convertSvg(
   const viewBoxStr = viewBox
     ? `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`
     : null;
+
+  // Assemble standalone SVGs in JS — prefix shared, only element fragment differs
+  const svgMap: Record<string, string> = {};
+  for (const [idx, el] of Object.entries(processed.elements)) {
+    let svg = processed.prefix;
+    if (el.transform) {
+      const [a, b, c, d, e, f] = el.transform;
+      svg += `<g transform="matrix(${a},${b},${c},${d},${e},${f})">${el.xml}</g>`;
+    } else {
+      svg += el.xml;
+    }
+    svg += "</svg>";
+    svgMap[idx] = svg;
+  }
 
   function processDescriptors(descs: any[]): any[] {
     const layers: any[] = [];
@@ -87,7 +104,6 @@ export async function convertSvg(
       return { name: desc.name, hidden: true };
     }
 
-    // serde outputs "type" (via #[serde(rename = "type")])
     const type = desc.type;
 
     if (type === "group") {
@@ -102,16 +118,15 @@ export async function convertSvg(
       completed++;
       if (onProgress) onProgress(completed, layerCount);
 
-      // Use Rust WASM to build text layer
       const textLayer = wasmBuildTextLayer(JSON.stringify(desc), viewBoxStr, scale);
       if (textLayer) return JSON.parse(textLayer);
 
-      // Fallback: render as pixel layer
-      return renderAsPixelLayer(desc, svgXml, width, height, scale);
+      // Fallback: render as pixel layer using pre-built SVG
+      return renderFromSvgMap(desc, svgMap, width, height, scale);
     }
 
     if (type === "graphic") {
-      const layer = renderAsPixelLayer(desc, svgXml, width, height, scale);
+      const layer = renderFromSvgMap(desc, svgMap, width, height, scale);
       completed++;
       if (onProgress) onProgress(completed, layerCount);
       return layer;
@@ -132,9 +147,9 @@ export async function convertSvg(
   };
 }
 
-function renderAsPixelLayer(
+function renderFromSvgMap(
   desc: any,
-  svgXml: string,
+  svgMap: Record<string, string>,
   width: number,
   height: number,
   scale: number,
@@ -143,12 +158,9 @@ function renderAsPixelLayer(
     const elementIdx = desc.elementIdx;
     if (elementIdx == null) return null;
 
-    // Use Rust WASM to build standalone SVG string
-    const transformJson = desc.transform ? JSON.stringify(desc.transform) : null;
-    const svgStr = wasmBuildStandaloneSvg(svgXml, elementIdx, transformJson);
+    const svgStr = svgMap[String(elementIdx)];
     if (!svgStr) return null;
 
-    // Render via resvg-wasm
     const result = renderSvgString(svgStr, width, height, scale);
     if (!result) return null;
 

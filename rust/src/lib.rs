@@ -6,6 +6,111 @@ pub mod core;
 
 use wasm_bindgen::prelude::*;
 
+/// All-in-one: parse + walk + enrich + extract parts in a SINGLE WASM call.
+/// Returns JSON: { width, height, viewBox, layerCount, descriptors, prefix, elements }
+#[wasm_bindgen(js_name = "processAll")]
+pub fn wasm_process_all(svg_xml: &str, view_box_json: Option<String>, scale: Option<f64>) -> Result<String, JsError> {
+    let doc = roxmltree::Document::parse(svg_xml)
+        .map_err(|e| JsError::new(&format!("SVG parse error: {}", e)))?;
+
+    let _scale = scale.unwrap_or(1.0);
+
+    // 1. Parse dimensions
+    let root = doc.root_element();
+    let view_box = svg::parser::parse_view_box(root.attribute("viewBox"));
+    let width: f64 = root.attribute("width").and_then(|v| v.parse().ok())
+        .unwrap_or_else(|| view_box.as_ref().map(|vb| vb.w).unwrap_or(800.0));
+    let height: f64 = root.attribute("height").and_then(|v| v.parse().ok())
+        .unwrap_or_else(|| view_box.as_ref().map(|vb| vb.h).unwrap_or(600.0));
+
+    // 2. Walk
+    let mut descriptors = svg::walker::walk_svg(&doc);
+    let layer_count = core::converter_core::count_all_layers(&descriptors);
+
+    // 3. Enrich text
+    let vb_override: Option<types::ViewBox> = view_box_json.and_then(|vb| serde_json::from_str(&vb).ok());
+    let vb_ref = vb_override.as_ref().or(view_box.as_ref());
+    let stylesheet = svg::style_resolver::parse_style_sheet(&doc);
+    enrich_with_doc(&mut descriptors, &doc, vb_ref, &stylesheet);
+
+    // 4. Extract SVG parts (prefix + element fragments)
+    let (prefix, _) = build_svg_shell(svg_xml, &doc);
+    let fo_re = regex::Regex::new(r"(?s)<foreignObject[^>]*>.*?</foreignObject>").unwrap();
+
+    let mut elements = serde_json::Map::new();
+    fn collect_and_extract(
+        descs: &[types::LayerDescriptor],
+        doc: &roxmltree::Document,
+        svg_xml: &str,
+        fo_re: &regex::Regex,
+        elements: &mut serde_json::Map<String, serde_json::Value>,
+    ) {
+        for d in descs {
+            if d.layer_type == "group" {
+                if let Some(ref children) = d.children {
+                    collect_and_extract(children, doc, svg_xml, fo_re, elements);
+                }
+            }
+            if let Some(idx) = d.element_idx {
+                if let Some(node) = doc.get_node(roxmltree::NodeId::new(idx)) {
+                    if node.is_element() {
+                        let el_range = node.range();
+                        if !el_range.is_empty() && el_range.end <= svg_xml.len() {
+                            let el_xml = fo_re.replace_all(&svg_xml[el_range], "");
+                            let mut entry = serde_json::Map::new();
+                            entry.insert("xml".into(), serde_json::Value::String(el_xml.into_owned()));
+                            if let Some(ref m) = d.transform {
+                                if !svg::transforms::is_identity(m) {
+                                    entry.insert("transform".into(), serde_json::to_value(m).unwrap());
+                                }
+                            }
+                            elements.insert(idx.to_string(), serde_json::Value::Object(entry));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    collect_and_extract(&descriptors, &doc, svg_xml, &fo_re, &mut elements);
+
+    // 5. Build result
+    let result = serde_json::json!({
+        "width": width,
+        "height": height,
+        "viewBox": view_box,
+        "layerCount": layer_count,
+        "descriptors": descriptors,
+        "prefix": prefix,
+        "elements": elements,
+    });
+
+    Ok(result.to_string())
+}
+
+fn enrich_with_doc(
+    descriptors: &mut [types::LayerDescriptor],
+    doc: &roxmltree::Document,
+    view_box: Option<&types::ViewBox>,
+    stylesheet: &[svg::style_resolver::CssRule],
+) {
+    for desc in descriptors.iter_mut() {
+        if desc.layer_type == "group" {
+            if let Some(ref mut children) = desc.children {
+                enrich_with_doc(children, doc, view_box, stylesheet);
+            }
+        } else if desc.layer_type == "text" {
+            if let Some(idx) = desc.element_idx {
+                if let Some(node) = doc.get_node(roxmltree::NodeId::new(idx)) {
+                    let transform = desc.transform.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+                    desc.text_info = svg::text_extractor::extract_text_info_from_node(
+                        node, &transform, view_box, stylesheet,
+                    );
+                }
+            }
+        }
+    }
+}
+
 /// Parse SVG string and return JSON with dimensions and viewBox
 #[wasm_bindgen(js_name = "parseSvgString")]
 pub fn wasm_parse_svg_string(xml: &str) -> Result<String, JsError> {
@@ -302,34 +407,171 @@ pub fn wasm_build_standalone_svg_for_element(
     let doc = roxmltree::Document::parse(svg_xml)
         .map_err(|e| JsError::new(&format!("SVG parse error: {}", e)))?;
 
-    let node = match doc.get_node(roxmltree::NodeId::new(element_idx)) {
-        Some(n) => n,
-        None => return Ok(None),
-    };
-
-    if !node.is_element() {
-        return Ok(None);
-    }
-
     let transform: Option<types::Matrix> = transform_json
         .and_then(|t| serde_json::from_str(&t).ok());
 
+    let (prefix, suffix) = build_svg_shell(svg_xml, &doc);
+
+    match build_element_svg(svg_xml, &doc, element_idx, transform.as_ref(), &prefix, &suffix) {
+        Some(s) => Ok(Some(s)),
+        None => Ok(None),
+    }
+}
+
+/// Batch build standalone SVGs for multiple elements in ONE parse pass
+/// Input: descriptors_json (array with elementIdx + transform fields)
+/// Output: JSON object { "elementIdx": "svgString", ... }
+#[wasm_bindgen(js_name = "buildAllStandaloneSvgs")]
+pub fn wasm_build_all_standalone_svgs(
+    svg_xml: &str,
+    descriptors_json: &str,
+) -> Result<String, JsError> {
+    let doc = roxmltree::Document::parse(svg_xml)
+        .map_err(|e| JsError::new(&format!("SVG parse error: {}", e)))?;
+
+    let descs: Vec<serde_json::Value> = serde_json::from_str(descriptors_json)
+        .map_err(|e| JsError::new(&format!("Invalid JSON: {}", e)))?;
+
+    let (prefix, suffix) = build_svg_shell(svg_xml, &doc);
+    let fo_re = regex::Regex::new(r"(?s)<foreignObject[^>]*>.*?</foreignObject>").unwrap();
+
+    let mut result_map = serde_json::Map::new();
+
+    fn collect_leaves(descs: &[serde_json::Value], out: &mut Vec<(u32, Option<types::Matrix>)>) {
+        for d in descs {
+            if let Some(children) = d.get("children").and_then(|c| c.as_array()) {
+                collect_leaves(children, out);
+            }
+            if let Some(idx) = d.get("elementIdx").and_then(|v| v.as_u64()) {
+                let transform: Option<types::Matrix> = d.get("transform")
+                    .and_then(|t| serde_json::from_value(t.clone()).ok());
+                out.push((idx as u32, transform));
+            }
+        }
+    }
+
+    let mut leaves = Vec::new();
+    collect_leaves(&descs, &mut leaves);
+
+    for (element_idx, transform) in &leaves {
+        let node = match doc.get_node(roxmltree::NodeId::new(*element_idx)) {
+            Some(n) if n.is_element() => n,
+            _ => continue,
+        };
+
+        let el_range = node.range();
+        if el_range.is_empty() || el_range.end > svg_xml.len() {
+            continue;
+        }
+        let el_xml = &svg_xml[el_range];
+        let el_xml = fo_re.replace_all(el_xml, "");
+
+        let mut svg_str = String::with_capacity(prefix.len() + el_xml.len() + suffix.len() + 100);
+        svg_str.push_str(&prefix);
+
+        if let Some(m) = transform {
+            if !svg::transforms::is_identity(m) {
+                let [a, b, c, d, e, f] = m;
+                svg_str.push_str(&format!(
+                    "<g transform=\"matrix({},{},{},{},{},{})\">",
+                    a, b, c, d, e, f
+                ));
+                svg_str.push_str(&el_xml);
+                svg_str.push_str("</g>");
+            } else {
+                svg_str.push_str(&el_xml);
+            }
+        } else {
+            svg_str.push_str(&el_xml);
+        }
+
+        svg_str.push_str(&suffix);
+        result_map.insert(element_idx.to_string(), serde_json::Value::String(svg_str));
+    }
+
+    Ok(serde_json::Value::Object(result_map).to_string())
+}
+
+/// Extract SVG shell prefix and all element fragments in ONE parse pass.
+/// Returns JSON: { "prefix": "<svg...><defs>...</defs>", "elements": { "idx": { "xml": "...", "transform": [..] | null } } }
+/// JS assembles: prefix + (transform wrapper) + element xml + "</svg>"
+#[wasm_bindgen(js_name = "extractSvgParts")]
+pub fn wasm_extract_svg_parts(
+    svg_xml: &str,
+    descriptors_json: &str,
+) -> Result<String, JsError> {
+    let doc = roxmltree::Document::parse(svg_xml)
+        .map_err(|e| JsError::new(&format!("SVG parse error: {}", e)))?;
+
+    let descs: Vec<serde_json::Value> = serde_json::from_str(descriptors_json)
+        .map_err(|e| JsError::new(&format!("Invalid JSON: {}", e)))?;
+
+    let (prefix, _) = build_svg_shell(svg_xml, &doc);
+
+    let fo_re = regex::Regex::new(r"(?s)<foreignObject[^>]*>.*?</foreignObject>").unwrap();
+
+    let mut elements = serde_json::Map::new();
+
+    fn collect_leaves(descs: &[serde_json::Value], out: &mut Vec<(u32, Option<types::Matrix>)>) {
+        for d in descs {
+            if let Some(children) = d.get("children").and_then(|c| c.as_array()) {
+                collect_leaves(children, out);
+            }
+            if let Some(idx) = d.get("elementIdx").and_then(|v| v.as_u64()) {
+                let transform: Option<types::Matrix> = d.get("transform")
+                    .and_then(|t| serde_json::from_value(t.clone()).ok());
+                out.push((idx as u32, transform));
+            }
+        }
+    }
+
+    let mut leaves = Vec::new();
+    collect_leaves(&descs, &mut leaves);
+
+    for (element_idx, transform) in &leaves {
+        let node = match doc.get_node(roxmltree::NodeId::new(*element_idx)) {
+            Some(n) if n.is_element() => n,
+            _ => continue,
+        };
+        let el_range = node.range();
+        if el_range.is_empty() || el_range.end > svg_xml.len() { continue; }
+
+        let el_xml = fo_re.replace_all(&svg_xml[el_range], "");
+
+        let mut entry = serde_json::Map::new();
+        entry.insert("xml".into(), serde_json::Value::String(el_xml.into_owned()));
+        if let Some(m) = transform {
+            if !svg::transforms::is_identity(m) {
+                entry.insert("transform".into(), serde_json::to_value(m).unwrap());
+            }
+        }
+        elements.insert(element_idx.to_string(), serde_json::Value::Object(entry));
+    }
+
+    let mut result = serde_json::Map::new();
+    result.insert("prefix".into(), serde_json::Value::String(prefix));
+    result.insert("elements".into(), serde_json::Value::Object(elements));
+
+    Ok(serde_json::Value::Object(result).to_string())
+}
+
+/// Pre-compute the SVG shell (header + defs/style + closing tag) from a parsed document.
+/// This avoids re-parsing the XML for each element.
+fn build_svg_shell(svg_xml: &str, doc: &roxmltree::Document) -> (String, String) {
     let root = doc.root_element();
 
-    // Extract the original <svg ...> open tag to preserve namespace declarations (xmlns:xlink etc.)
     let root_range = root.range();
-    let root_xml = &svg_xml[root_range.clone()];
+    let root_xml = &svg_xml[root_range];
     let open_tag_end = root_xml.find('>').unwrap_or(0);
     let open_tag = &root_xml[..open_tag_end + 1];
-    // If self-closing, fix it
     let open_tag = if open_tag.ends_with("/>") {
         format!("{}>", &open_tag[..open_tag.len() - 2])
     } else {
         open_tag.to_string()
     };
 
-    let mut result = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-    result.push_str(&open_tag);
+    let mut prefix = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    prefix.push_str(&open_tag);
 
     for child in root.children() {
         if child.is_element() {
@@ -337,30 +579,48 @@ pub fn wasm_build_standalone_svg_for_element(
             if tag == "defs" || tag == "style" {
                 let range = child.range();
                 if !range.is_empty() && range.end <= svg_xml.len() {
-                    result.push_str(&svg_xml[range]);
+                    prefix.push_str(&svg_xml[range]);
                 }
             }
         }
     }
 
-    let el_range = node.range();
-    let el_xml = if !el_range.is_empty() && el_range.end <= svg_xml.len() {
-        svg_xml[el_range].to_string()
-    } else {
-        return Ok(None);
-    };
+    (prefix, "</svg>".to_string())
+}
 
-    // Remove foreignObject
-    let re = regex::Regex::new(r"(?s)<foreignObject[^>]*>.*?</foreignObject>").unwrap();
-    let el_xml = re.replace_all(&el_xml, "").to_string();
+fn build_element_svg(
+    svg_xml: &str,
+    doc: &roxmltree::Document,
+    element_idx: u32,
+    transform: Option<&types::Matrix>,
+    prefix: &str,
+    suffix: &str,
+) -> Option<String> {
+    let node = doc.get_node(roxmltree::NodeId::new(element_idx))?;
+    if !node.is_element() {
+        return None;
+    }
+
+    let el_range = node.range();
+    if el_range.is_empty() || el_range.end > svg_xml.len() {
+        return None;
+    }
+    let el_xml = &svg_xml[el_range];
+
+    let fo_re = regex::Regex::new(r"(?s)<foreignObject[^>]*>.*?</foreignObject>").unwrap();
+    let el_xml = fo_re.replace_all(el_xml, "");
+
+    let mut result = String::with_capacity(prefix.len() + el_xml.len() + suffix.len() + 100);
+    result.push_str(prefix);
 
     if let Some(m) = transform {
-        if !svg::transforms::is_identity(&m) {
-            let [a, b, c, d, e, f] = m;
+        if !svg::transforms::is_identity(m) {
+            let [a, b, c, d, e, f] = *m;
             result.push_str(&format!(
-                "<g transform=\"matrix({},{},{},{},{},{})\">{}",
-                a, b, c, d, e, f, el_xml
+                "<g transform=\"matrix({},{},{},{},{},{})\">",
+                a, b, c, d, e, f
             ));
+            result.push_str(&el_xml);
             result.push_str("</g>");
         } else {
             result.push_str(&el_xml);
@@ -369,6 +629,6 @@ pub fn wasm_build_standalone_svg_for_element(
         result.push_str(&el_xml);
     }
 
-    result.push_str("</svg>");
-    Ok(Some(result))
+    result.push_str(suffix);
+    Some(result)
 }

@@ -29,7 +29,11 @@ pub fn parse_transform(s: Option<&str>) -> Matrix {
         Some(s) => s,
     };
 
-    let re = regex::Regex::new(r"(?i)(matrix|translate|rotate|scale|skewX|skewY)\s*\(([^)]*)\)").unwrap();
+    use std::sync::LazyLock;
+    static RE: LazyLock<regex::Regex> = LazyLock::new(|| {
+        regex::Regex::new(r"(?i)(matrix|translate|rotate|scale|skewX|skewY)\s*\(([^)]*)\)").unwrap()
+    });
+    let re = &*RE;
     let mut result = identity();
 
     for caps in re.captures_iter(s) {
