@@ -12,6 +12,7 @@ import initWasm, {
   buildAllStandaloneSvgs as wasmBuildAllStandaloneSvgs,
   extractSvgParts as wasmExtractSvgParts,
   processAll as wasmProcessAll,
+  convertAll as wasmConvertAll,
 } from "../pkg-web/svg2psd_wasm.js";
 import { renderSvgString } from "./platform/renderer.js";
 
@@ -203,4 +204,15 @@ function applyCommonProps(layer: any, desc: any): void {
     layer.blendMode = BLEND_MAP[blendMode];
   }
   if (desc.hidden) layer.hidden = true;
+}
+
+/**
+ * 一次性 SVG → PSD 转换（全部在 WASM 中完成，无中间 JS 传输）
+ * 返回完整的 PSD 文件 Uint8Array
+ */
+export function convertSvgToPsd(
+  svgXml: string,
+  scale: number = 1,
+): Uint8Array {
+  return wasmConvertAll(svgXml, scale);
 }

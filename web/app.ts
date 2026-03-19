@@ -104,20 +104,22 @@ async function handleFile(file: File): Promise<void> {
     let layerCount: number;
 
     if (currentEngine === "rust") {
-      showStatus("解析 SVG (Rust)...");
-      const parsed = rustEngine.parseSvgString(text);
+      showStatus("转换中 (Rust all-in-one)...");
+      setProgress(50);
+      const psdBytes = rustEngine.convertSvgToPsd(text, scale);
+      setProgress(100);
 
-      showStatus("转换中 (Rust)...");
-      const result = await rustEngine.convertSvg(text, parsed.width, parsed.height, parsed.viewBox, {
-        scale,
-        onProgress: (current, total) => {
-          const pct = Math.round((current / total) * 100);
-          setProgress(pct);
-          setStatusText(`渲染图层 (Rust): ${current}/${total}`);
-        },
-      });
-      psd = result.psd;
-      layerCount = result.layerCount;
+      // 直接生成 Blob 下载，跳过 ag-psd JS 和 resvg-wasm
+      if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+      downloadUrl = URL.createObjectURL(new Blob([psdBytes], { type: "application/octet-stream" }));
+
+      const sizeMB = (psdBytes.byteLength / 1024 / 1024).toFixed(2);
+      const elapsed = (performance.now() - t0).toFixed(0);
+      setStatusText(`完成! ${sizeMB} MB`);
+      timingEl.textContent = `Rust 耗时: ${elapsed} ms`;
+      showDownload();
+      // all-in-one 模式无法获取详细图层树，跳过预览
+      return;
     } else {
       showStatus("解析 SVG (TS)...");
       const { svg, width, height, viewBox } = tsParseString(text);

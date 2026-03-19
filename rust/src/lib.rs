@@ -6,6 +6,15 @@ pub mod core;
 
 use wasm_bindgen::prelude::*;
 
+/// SVG → PSD 一次性转换：parse + walk + enrich + render + write PSD
+/// 返回完整的 PSD 文件字节
+#[wasm_bindgen(js_name = "convertAll")]
+pub fn wasm_convert_all(svg_xml: &str, scale: Option<f64>) -> Result<Vec<u8>, JsError> {
+    let scale = scale.unwrap_or(1.0);
+    core::convert_all::convert_svg_to_psd(svg_xml, scale)
+        .map_err(|e| JsError::new(&e))
+}
+
 /// All-in-one: parse + walk + enrich + extract parts in a SINGLE WASM call.
 /// Returns JSON: { width, height, viewBox, layerCount, descriptors, prefix, elements }
 #[wasm_bindgen(js_name = "processAll")]
