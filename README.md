@@ -1,5 +1,7 @@
 # svg2psd
 
+<img width="3436" height="1904" alt="image" src="https://github.com/user-attachments/assets/30e4ad0e-bdd4-4029-9c42-b34643ef34cb" />
+
 将 SVG 转换为分层 PSD（Photoshop）文件。`<g>` 映射为图层组，图形元素保留为独立图层，`<text>` 转为可编辑文字图层。
 
 支持 CLI 和浏览器 Web App 两种使用方式。
