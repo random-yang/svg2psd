@@ -1,3 +1,4 @@
+import type { Psd } from "ag-psd";
 import { initializeCanvas, writePsdUint8Array } from "ag-psd";
 
 let initialized = false;
@@ -16,7 +17,7 @@ export function initPsdWriter(): void {
   initialized = true;
 }
 
-export function writePsdBlob(psdDoc: Parameters<typeof writePsdUint8Array>[0]): Blob {
+export function writePsdBlob(psdDoc: Psd): Blob {
   initPsdWriter();
   const buffer = writePsdUint8Array(psdDoc, {
     invalidateTextLayers: true,

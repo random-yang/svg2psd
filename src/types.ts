@@ -1,3 +1,5 @@
+import type { Layer } from "ag-psd";
+
 /** 6 元素仿射变换矩阵 [a, b, c, d, e, f] */
 export type Matrix = [number, number, number, number, number, number];
 
@@ -86,7 +88,7 @@ export type BuildTextLayerFn = (
   width: number,
   height: number,
   scale: number,
-) => Record<string, unknown> | null;
+) => Layer | null;
 
 /** 转换选项 */
 export interface ConvertOptions {

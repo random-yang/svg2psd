@@ -1,3 +1,4 @@
+import type { Psd } from "ag-psd";
 import type { ViewBox, LayerDescriptor, ConvertOptions } from "../types.js";
 import { walkSvg } from "../svg/walker.js";
 import { buildPsd } from "../psd/builder.js";
@@ -9,7 +10,7 @@ export async function convertSvg(
   height: number,
   viewBox: ViewBox | null,
   options: ConvertOptions = { renderElement: () => null },
-): Promise<{ psd: Record<string, unknown>; layerCount: number }> {
+): Promise<{ psd: Psd; layerCount: number }> {
   const { scale = 1, renderElement, buildTextLayer, onProgress } = options;
 
   const descriptors = walkSvg(svg);
@@ -27,7 +28,7 @@ export async function convertSvg(
     renderElement,
   });
 
-  if (!(psd as { children?: unknown[] }).children || ((psd as { children: unknown[] }).children).length === 0) {
+  if (!psd.children || psd.children.length === 0) {
     throw new Error("没有成功渲染的图层");
   }
 
