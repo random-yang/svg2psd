@@ -1,4 +1,6 @@
-export const BLEND_MODE_MAP: Record<string, string> = {
+import type { BlendMode } from "ag-psd";
+
+export const BLEND_MODE_MAP: Record<string, BlendMode> = {
   "normal": "normal",
   "multiply": "multiply",
   "screen": "screen",
@@ -24,7 +26,7 @@ export function toPsdOpacity(opacity: number | undefined | null): number {
   return Math.max(0, Math.min(1, opacity));
 }
 
-export function toPsdBlendMode(mode: string | null | undefined): string {
+export function toPsdBlendMode(mode: string | null | undefined): BlendMode {
   if (!mode) return "normal";
   return BLEND_MODE_MAP[mode.trim().toLowerCase()] || "normal";
 }

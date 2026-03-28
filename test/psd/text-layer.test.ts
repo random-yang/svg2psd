@@ -5,6 +5,7 @@ import { extractTextInfo } from "../../src/svg/text-extractor.js";
 import { buildTextLayer } from "../../src/psd/text-layer.js";
 import { identity } from "../../src/svg/transforms.js";
 import type { LayerDescriptor } from "../../src/types.js";
+import type { LayerTextData } from "ag-psd";
 
 function makeTextDesc(svgStr: string): { desc: LayerDescriptor; svg: Element } | null {
   const { svg, viewBox } = parseSvgString(svgStr);
@@ -32,9 +33,9 @@ describe("buildTextLayer", () => {
     )!;
     const layer = buildTextLayer(desc, svg, 200, 200, 1)!;
     assert.ok(layer);
-    assert.strictEqual((layer.text as { text: string }).text, "Hello");
-    assert.ok((layer.text as { transform: unknown }).transform);
-    assert.ok((layer.text as { style: unknown }).style);
+    assert.strictEqual(layer.text!.text, "Hello");
+    assert.ok(layer.text!.transform);
+    assert.ok(layer.text!.style);
   });
 
   it("foreignObject → point text（兼容 Affinity 等非 Photoshop 工具）", () => {
@@ -47,9 +48,9 @@ describe("buildTextLayer", () => {
     )!;
     const layer = buildTextLayer(desc, svg, 400, 200, 1)!;
     assert.ok(layer);
-    assert.strictEqual((layer.text as { text: string }).text, "Hello Box");
-    assert.strictEqual((layer.text as Record<string, unknown>).shapeType, undefined);
-    assert.strictEqual((layer.text as Record<string, unknown>).boxBounds, undefined);
+    assert.strictEqual(layer.text!.text, "Hello Box");
+    assert.strictEqual((layer.text as LayerTextData).shapeType, undefined);
+    assert.strictEqual((layer.text as LayerTextData).boxBounds, undefined);
   });
 
   it("viewBox offset 正确应用到坐标", () => {
@@ -58,8 +59,8 @@ describe("buildTextLayer", () => {
     )!;
     const layer = buildTextLayer(desc, svg, 200, 200, 1)!;
     assert.ok(layer);
-    assert.strictEqual((layer.text as { transform: number[] }).transform[4], 10);
-    assert.strictEqual((layer.text as { transform: number[] }).transform[5], 30);
+    assert.strictEqual(layer.text!.transform![4], 10);
+    assert.strictEqual(layer.text!.transform![5], 30);
   });
 
   it("opacity 传递到 layer", () => {
@@ -77,7 +78,7 @@ describe("buildTextLayer", () => {
     )!;
     const layer = buildTextLayer(desc, svg, 200, 200, 1)!;
     assert.ok(layer);
-    assert.strictEqual((layer.text as { style: { tracking: number } }).style.tracking, 250);
+    assert.strictEqual(layer.text!.style!.tracking, 250);
   });
 
   it("line-height → leading + autoLeading 正确转换", () => {
@@ -86,8 +87,8 @@ describe("buildTextLayer", () => {
     )!;
     const layer = buildTextLayer(desc, svg, 200, 200, 1)!;
     assert.ok(layer);
-    assert.strictEqual((layer.text as { style: { autoLeading: boolean } }).style.autoLeading, false);
-    assert.strictEqual((layer.text as { style: { leading: number } }).style.leading, 30);
+    assert.strictEqual(layer.text!.style!.autoLeading, false);
+    assert.strictEqual(layer.text!.style!.leading, 30);
   });
 
   it("leading 应用 scale 因子", () => {
@@ -96,8 +97,8 @@ describe("buildTextLayer", () => {
     )!;
     const layer = buildTextLayer(desc, svg, 200, 200, 2)!;
     assert.ok(layer);
-    assert.strictEqual((layer.text as { style: { leading: number } }).style.leading, 60);
-    assert.strictEqual((layer.text as { style: { autoLeading: boolean } }).style.autoLeading, false);
+    assert.strictEqual(layer.text!.style!.leading, 60);
+    assert.strictEqual(layer.text!.style!.autoLeading, false);
   });
 
   it("无 letter-spacing/line-height 时不输出 tracking/leading", () => {
@@ -106,9 +107,9 @@ describe("buildTextLayer", () => {
     )!;
     const layer = buildTextLayer(desc, svg, 200, 200, 1)!;
     assert.ok(layer);
-    assert.strictEqual((layer.text as { style: Record<string, unknown> }).style.tracking, undefined);
-    assert.strictEqual((layer.text as { style: Record<string, unknown> }).style.leading, undefined);
-    assert.strictEqual((layer.text as { style: Record<string, unknown> }).style.autoLeading, undefined);
+    assert.strictEqual(layer.text!.style!.tracking, undefined);
+    assert.strictEqual(layer.text!.style!.leading, undefined);
+    assert.strictEqual(layer.text!.style!.autoLeading, undefined);
   });
 
   it("scale 因子正确应用到 fontSize 和坐标", () => {
@@ -117,8 +118,8 @@ describe("buildTextLayer", () => {
     )!;
     const layer = buildTextLayer(desc, svg, 200, 200, 2)!;
     assert.ok(layer);
-    assert.strictEqual((layer.text as { style: { fontSize: number } }).style.fontSize, 48);
-    assert.strictEqual((layer.text as { transform: number[] }).transform[4], 20);
-    assert.strictEqual((layer.text as { transform: number[] }).transform[5], 100);
+    assert.strictEqual(layer.text!.style!.fontSize, 48);
+    assert.strictEqual(layer.text!.transform![4], 20);
+    assert.strictEqual(layer.text!.transform![5], 100);
   });
 });

@@ -1,6 +1,7 @@
+import type { BlendMode, Layer, Psd } from "ag-psd";
 import type { LayerDescriptor, RenderElementFn, BuildTextLayerFn } from "../types.js";
 
-const BLEND_MODE_MAP: Record<string, string> = {
+const BLEND_MODE_MAP: Record<string, BlendMode> = {
   normal: "normal",
   multiply: "multiply",
   screen: "screen",
@@ -32,7 +33,7 @@ export async function buildPsd(
   height: number,
   scale: number,
   options: BuildPsdOptions = {},
-): Promise<Record<string, unknown>> {
+): Promise<Psd> {
   const psdW = Math.round(width * scale);
   const psdH = Math.round(height * scale);
   const { buildTextLayer, onProgress, renderElement } = options;
@@ -40,8 +41,8 @@ export async function buildPsd(
   let completed = 0;
   const total = countLayers(descriptors);
 
-  async function processDescriptors(descs: LayerDescriptor[]): Promise<Record<string, unknown>[]> {
-    const layers: Record<string, unknown>[] = [];
+  async function processDescriptors(descs: LayerDescriptor[]): Promise<Layer[]> {
+    const layers: Layer[] = [];
     for (const desc of descs) {
       const layer = await processDescriptor(desc);
       if (layer) layers.push(layer);
@@ -49,7 +50,7 @@ export async function buildPsd(
     return layers;
   }
 
-  async function processDescriptor(desc: LayerDescriptor): Promise<Record<string, unknown> | null> {
+  async function processDescriptor(desc: LayerDescriptor): Promise<Layer | null> {
     if (desc.hidden) {
       completed++;
       return createHiddenLayer(desc);
@@ -59,7 +60,7 @@ export async function buildPsd(
       const children = await processDescriptors(desc.children || []);
       if (children.length === 0) return null;
 
-      const layer: Record<string, unknown> = {
+      const layer: Layer = {
         name: desc.name,
         opened: true,
         children,
@@ -107,12 +108,12 @@ async function renderAsPixelLayer(
   height: number,
   scale: number,
   renderElement: RenderElementFn,
-): Promise<Record<string, unknown> | null> {
+): Promise<Layer | null> {
   try {
     const result = renderElement(desc.element!, svgRoot, width, height, scale, desc.transform);
     if (!result) return null;
 
-    const layer: Record<string, unknown> = {
+    const layer: Layer = {
       name: desc.name,
       top: result.top,
       left: result.left,
@@ -132,19 +133,20 @@ async function renderAsPixelLayer(
   }
 }
 
-function createHiddenLayer(desc: LayerDescriptor): Record<string, unknown> {
+function createHiddenLayer(desc: LayerDescriptor): Layer {
   return {
     name: desc.name,
     hidden: true,
   };
 }
 
-function applyCommonProps(layer: Record<string, unknown>, desc: LayerDescriptor): void {
+function applyCommonProps(layer: Layer, desc: LayerDescriptor): void {
   if (desc.opacity !== undefined && desc.opacity < 1) {
     layer.opacity = desc.opacity;
   }
-  if (desc.blendMode && BLEND_MODE_MAP[desc.blendMode]) {
-    layer.blendMode = BLEND_MODE_MAP[desc.blendMode];
+  const mappedBlend = desc.blendMode ? BLEND_MODE_MAP[desc.blendMode] : undefined;
+  if (mappedBlend) {
+    layer.blendMode = mappedBlend;
   }
   if (desc.hidden) {
     layer.hidden = true;

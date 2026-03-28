@@ -107,7 +107,7 @@ export async function convertSvgToPsd(
 
   console.log(`图层树: ${layerCount} 个图层`);
 
-  const buffer = writePsdBuffer(psd as unknown as Parameters<typeof writePsdBuffer>[0], {
+  const buffer = writePsdBuffer(psd, {
     invalidateTextLayers: true,
     generateThumbnail: true,
   });
@@ -116,8 +116,7 @@ export async function convertSvgToPsd(
     outputPath = inputPath.replace(/\.svg$/i, ".psd");
   }
   fs.writeFileSync(outputPath, buffer);
-  const psdObj = psd as { width: number; height: number; children: unknown[] };
-  console.log(`完成: ${outputPath} (${psdObj.width}×${psdObj.height}, ${psdObj.children.length} 个顶层图层)`);
+  console.log(`完成: ${outputPath} (${psd.width}×${psd.height}, ${(psd.children ?? []).length} 个顶层图层)`);
 
   return outputPath;
 }

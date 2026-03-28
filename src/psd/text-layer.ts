@@ -1,3 +1,4 @@
+import type { Justification, Layer, LayerTextData, TextStyle, TextStyleRun } from "ag-psd";
 import type { LayerDescriptor, TextRun } from "../types.js";
 
 export function buildTextLayer(
@@ -6,7 +7,7 @@ export function buildTextLayer(
   _width: number,
   _height: number,
   scale: number,
-): Record<string, unknown> | null {
+): Layer | null {
   const info = desc.textInfo;
   if (!info || !info.text) return null;
 
@@ -26,34 +27,39 @@ export function buildTextLayer(
 
   const styleRuns = buildStyleRuns(runs, scale);
 
-  const layer: Record<string, unknown> = {
-    name: desc.name || `Text: ${info.text.slice(0, 30)}`,
-    text: {
-      text: info.text,
-      antiAlias: "smooth",
-      transform: [1, 0, 0, 1, px, py],
-      style: styleRuns.length > 0 ? styleRuns[0].style : {
-        font: { name: firstRun.psName || "ArialMT" },
-        fontSize: (firstRun.fontSize || 24) * scale,
-        fillColor: firstRun.fillColor || { r: 0, g: 0, b: 0 },
-        fauxBold: firstRun.fauxBold || false,
-        ...(firstRun.letterSpacing != null && {
-          tracking: Math.round(firstRun.letterSpacing / (firstRun.fontSize || 24) * 1000),
-        }),
-        ...(firstRun.lineHeight != null && {
-          autoLeading: false,
-          leading: firstRun.lineHeight * scale,
-        }),
-      },
-      paragraphStyle: {
-        justification: justificationFromAnchor(info.textAnchor),
-      },
+  const text: LayerTextData = {
+    text: info.text,
+    antiAlias: "smooth",
+    transform: [1, 0, 0, 1, px, py],
+    style:
+      styleRuns.length > 0
+        ? styleRuns[0]!.style
+        : {
+            font: { name: firstRun.psName || "ArialMT" },
+            fontSize: (firstRun.fontSize || 24) * scale,
+            fillColor: firstRun.fillColor || { r: 0, g: 0, b: 0 },
+            fauxBold: firstRun.fauxBold || false,
+            ...(firstRun.letterSpacing != null && {
+              tracking: Math.round((firstRun.letterSpacing / (firstRun.fontSize || 24)) * 1000),
+            }),
+            ...(firstRun.lineHeight != null && {
+              autoLeading: false,
+              leading: firstRun.lineHeight * scale,
+            }),
+          },
+    paragraphStyle: {
+      justification: justificationFromAnchor(info.textAnchor),
     },
   };
 
   if (styleRuns.length > 1) {
-    (layer.text as Record<string, unknown>).styleRuns = styleRuns;
+    text.styleRuns = styleRuns;
   }
+
+  const layer: Layer = {
+    name: desc.name || `Text: ${info.text.slice(0, 30)}`,
+    text,
+  };
 
   if (desc.opacity !== undefined && desc.opacity < 1) {
     layer.opacity = desc.opacity;
@@ -65,12 +71,7 @@ export function buildTextLayer(
   return layer;
 }
 
-interface StyleRun {
-  length: number;
-  style: Record<string, unknown>;
-}
-
-function buildStyleRuns(runs: TextRun[], scale: number): StyleRun[] {
+function buildStyleRuns(runs: TextRun[], scale: number): TextStyleRun[] {
   if (runs.length === 0) return [];
 
   return runs.map((run) => ({
@@ -81,17 +82,17 @@ function buildStyleRuns(runs: TextRun[], scale: number): StyleRun[] {
       fillColor: run.fillColor,
       fauxBold: run.fauxBold,
       ...(run.letterSpacing != null && {
-        tracking: Math.round(run.letterSpacing / run.fontSize * 1000),
+        tracking: Math.round((run.letterSpacing / run.fontSize) * 1000),
       }),
       ...(run.lineHeight != null && {
         autoLeading: false,
         leading: run.lineHeight * scale,
       }),
-    },
+    } satisfies TextStyle,
   }));
 }
 
-function justificationFromAnchor(anchor: string): string {
+function justificationFromAnchor(anchor: string): Justification {
   if (anchor === "middle") return "center";
   if (anchor === "end") return "right";
   return "left";

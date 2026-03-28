@@ -1,3 +1,4 @@
+import type { Layer } from "ag-psd";
 import { parseSvgString } from "./platform/parser.js";
 import { init as initRenderer, renderElement } from "./platform/renderer.js";
 import { writePsdBlob, initPsdWriter } from "./platform/psd-writer.js";
@@ -202,22 +203,21 @@ async function handleConvert(file: File, text: string): Promise<void> {
     showStatus("生成 PSD...");
     setProgress(100);
 
-    const psdBlob = writePsdBlob(psd as Parameters<typeof writePsdBlob>[0]);
+    const psdBlob = writePsdBlob(psd);
 
     if (downloadUrl) URL.revokeObjectURL(downloadUrl);
     downloadUrl = URL.createObjectURL(psdBlob);
 
     const elapsed = (performance.now() - t0).toFixed(0);
-    const psdObj = psd as { width: number; height: number };
     const sizeMB = (psdBlob.size / 1024 / 1024).toFixed(2);
 
     progressBar.style.width = "100%";
     progressBar.classList.add("done");
-    statusMsg.textContent = `${psdObj.width}×${psdObj.height} · ${count} 图层`;
+    statusMsg.textContent = `${psd.width}×${psd.height} · ${count} 图层`;
     statusTime.textContent = `${elapsed}ms`;
 
     showResult(downloadFilename, `${sizeMB} MB · ${count} 图层`);
-    showLayerPreview((psd as { children?: PsdChild[] }).children || []);
+    showLayerPreview(psd.children || []);
     addHistory(downloadFilename, sizeMB);
   } catch (e) {
     showError((e as Error).message);
@@ -229,18 +229,12 @@ async function handleConvert(file: File, text: string): Promise<void> {
 }
 
 // ── Layer Tree ──
-interface PsdChild {
-  name?: string;
-  children?: PsdChild[];
-  text?: unknown;
-}
-
-function showLayerPreview(children: PsdChild[]): void {
+function showLayerPreview(children: Layer[]): void {
   layerTree.innerHTML = "";
   placeholder.style.display = "none";
 
   let total = 0;
-  function count(items: PsdChild[]) {
+  function count(items: Layer[]) {
     for (const c of items) { total++; if (c.children) count(c.children); }
   }
   count(children);
@@ -249,7 +243,7 @@ function showLayerPreview(children: PsdChild[]): void {
   buildNodes(children, layerTree, 0);
 }
 
-function buildNodes(children: PsdChild[], container: HTMLElement, depth: number): void {
+function buildNodes(children: Layer[], container: HTMLElement, depth: number): void {
   for (const child of children) {
     const isGroup = !!child.children;
     const isText = !!child.text;
